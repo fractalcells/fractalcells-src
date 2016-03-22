@@ -57,15 +57,6 @@ static void pax_set_flags_td(struct thread *td, const pax_flag_t flags);
 static int pax_validate_flags(const pax_flag_t flags);
 static int pax_check_conflicting_modes(const pax_flag_t mode);
 
-/*
- * Enforce and check HardenedBSD constraints
- */
-#ifndef INVARIANTS
-#ifndef PAX_INSECURE_MODE
-#error "HardenedBSD required enabled INVARIANTS in kernel config... If you really know what you're doing you can add `options PAX_INSECURE_MODE` to the kernel config"
-#endif
-#endif
-
 CTASSERT((sizeof((struct proc *)NULL)->p_pax) == sizeof(pax_flag_t));
 CTASSERT((sizeof((struct thread *)NULL)->td_pax) == sizeof(pax_flag_t));
 
