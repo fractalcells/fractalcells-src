@@ -3030,3 +3030,8 @@ options		EM_MULTIQUEUE # Activate multiqueue features/disable MSI-X
 # zlib I/O stream support
 # This enables support for compressed core dumps.
 options 	GZIO
+
+# PAX and HardenedBSD related knobs
+options		PAX
+options		PAX_ASLR
+options		PAX_SYSCTLS
