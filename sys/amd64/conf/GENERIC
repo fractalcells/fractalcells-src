@@ -367,3 +367,5 @@ device		vmx			# VMware VMXNET3 Ethernet
 
 options		PAX
 options		PAX_ASLR
+options		INVARIANTS
+options		INVARIANT_SUPPORT
