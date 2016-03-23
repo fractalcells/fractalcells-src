@@ -689,8 +689,6 @@ pax_aslr_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mo
 	if (status == PAX_FEATURE_DISABLED) {
 		flags &= ~PAX_NOTE_ASLR;
 		flags |= PAX_NOTE_NOASLR;
-		flags &= ~PAX_NOTE_SHLIBRANDOM;
-		flags |= PAX_NOTE_NOSHLIBRANDOM;
 
 		return (flags);
 	}
@@ -698,8 +696,6 @@ pax_aslr_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mo
 	if (status == PAX_FEATURE_FORCE_ENABLED) {
 		flags |= PAX_NOTE_ASLR;
 		flags &= ~PAX_NOTE_NOASLR;
-		flags |= PAX_NOTE_SHLIBRANDOM;
-		flags &= ~PAX_NOTE_NOSHLIBRANDOM;
 
 		return (flags);
 	}
@@ -711,13 +707,6 @@ pax_aslr_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mo
 		} else {
 			flags &= ~PAX_NOTE_ASLR;
 			flags |= PAX_NOTE_NOASLR;
-		}
-		if (mode & PAX_NOTE_SHLIBRANDOM) {
-			flags |= PAX_NOTE_SHLIBRANDOM;
-			flags &= ~PAX_NOTE_NOSHLIBRANDOM;
-		} else {
-			flags &= ~PAX_NOTE_SHLIBRANDOM;
-			flags |= PAX_NOTE_NOSHLIBRANDOM;
 		}
 
 		return (flags);
@@ -731,13 +720,6 @@ pax_aslr_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mo
 			flags |= PAX_NOTE_ASLR;
 			flags &= ~PAX_NOTE_NOASLR;
 		}
-		if (mode & PAX_NOTE_NOSHLIBRANDOM) {
-			flags &= ~PAX_NOTE_SHLIBRANDOM;
-			flags |= PAX_NOTE_NOSHLIBRANDOM;
-		} else {
-			flags |= PAX_NOTE_SHLIBRANDOM;
-			flags &= ~PAX_NOTE_NOSHLIBRANDOM;
-		}
 
 		return (flags);
 	}
@@ -747,8 +729,6 @@ pax_aslr_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mo
 	 */
 	flags |= PAX_NOTE_ASLR;
 	flags &= ~PAX_NOTE_NOASLR;
-	flags |= PAX_NOTE_SHLIBRANDOM;
-	flags &= ~PAX_NOTE_NOSHLIBRANDOM;
 
 	return (flags);
 }
