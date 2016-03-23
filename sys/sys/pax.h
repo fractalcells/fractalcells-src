@@ -32,8 +32,6 @@
 #ifndef	_SYS_PAX_H
 #define	_SYS_PAX_H
 
-#define	__HardenedBSD_version	43UL
-
 #if defined(_KERNEL) || defined(_WANT_PRISON)
 struct hbsd_features {
 	struct hbsd_aslr {
@@ -41,19 +39,6 @@ struct hbsd_features {
 		int	 compat_status;	/* (p) PaX ASLR enabled (compat32) */
 		int	 disallow_map32bit_status; /* (p) MAP_32BIT protection (__LP64__ only) */
 	} aslr;
-	struct hbsd_segvguard {
-		int	 status;       /* (p) PaX segvguard enabled */
-		int	 expiry;       /* (p) num of seconds to expire an entry */
-		int	 suspension;   /* (p) num of seconds to suspend an application */
-		int	 maxcrashes;   /* (p) Maximum number of crashes before suspending application */
-	} segvguard;
-	struct hbsd_noexec {
-		int	 pageexec_status;	/* (p) Remove WX pages from user-space */
-		int	 mprotect_status;	/* (p) Enforce W^X mappings */
-	} noexec;
-	struct hbsd_hardening {
-		int	 procfs_harden;		/* (p) Harden procfs */
-	} hardening;
 	struct hbsd_log {
 		int	log;		/* (p) Per-jail logging status */
 		int	ulog;		/* (p) Per-jail user visible logging status */
@@ -92,7 +77,6 @@ extern const char *pax_status_simple_str[];
 /*
  * generic pax functions
  */
-uint64_t pax_get_hardenedbsd_version(void);
 int pax_elf(struct image_params *imgp, struct thread *td, pax_flag_t mode);
 void pax_get_flags(struct proc *p, pax_flag_t *flags);
 void pax_get_flags_td(struct thread *td, pax_flag_t *flags);
@@ -151,43 +135,6 @@ void pax_log_internal_imgp(struct image_params *imgp, pax_log_settings_t flags, 
 void pax_ulog_internal(const char *fmt, ...) __printflike(1, 2);
 void pax_log_aslr(struct proc *, pax_log_settings_t flags, const char *fmt, ...) __printflike(3, 4);
 void pax_ulog_aslr(const char *fmt, ...) __printflike(1, 2);
-void pax_log_pageexec(struct proc *, pax_log_settings_t flags, const char *fmt, ...) __printflike(3, 4);
-void pax_ulog_pageexec(const char *fmt, ...) __printflike(1, 2);
-void pax_log_mprotect(struct proc *, pax_log_settings_t flags, const char *fmt, ...) __printflike(3, 4);
-void pax_ulog_mprotect(const char *fmt, ...) __printflike(1, 2);
-void pax_log_segvguard(struct proc *, pax_log_settings_t flags, const char *fmt, ...) __printflike(3, 4);
-void pax_ulog_segvguard(const char *fmt, ...) __printflike(1, 2);
-
-/*
- * SegvGuard related functions
- */
-#ifdef PAX_SEGVGUARD
-void pax_segvguard_init_prison(struct prison *pr);
-#else
-#define	pax_segvguard_init_prison(pr)	do {} while (0)
-#endif
-int pax_segvguard_check(struct thread *, struct vnode *, const char *);
-int pax_segvguard_segfault(struct thread *, const char *);
-void pax_segvguard_remove(struct thread *td, struct vnode *vn);
-pax_flag_t pax_segvguard_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mode);
-
-/*
- * PAX PAGEEXEC and MPROTECT hardening
- */
-#ifdef PAX_NOEXEC
-void pax_noexec_init_prison(struct prison *pr);
-#else
-#define	pax_noexec_init_prison(pr)	do {} while (0)
-#endif
-void pax_noexec_nw(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot);
-void pax_noexec_nx(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot);
-bool pax_pageexec_active(struct proc *p);
-bool pax_mprotect_active(struct proc *p);
-pax_flag_t pax_pageexec_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mode);
-pax_flag_t pax_mprotect_setup_flags(struct image_params *imgp, struct thread *td, pax_flag_t mode);
-void pax_pageexec(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot);
-void pax_mprotect(struct proc *p, vm_prot_t *prot, vm_prot_t *maxprot);
-int pax_mprotect_enforce(struct proc *p, vm_map_t map, vm_prot_t old_prot, vm_prot_t new_prot);
 
 /*
  * Hardening related functions

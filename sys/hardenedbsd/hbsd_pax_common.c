@@ -60,19 +60,8 @@ static int pax_check_conflicting_modes(const pax_flag_t mode);
 CTASSERT((sizeof((struct proc *)NULL)->p_pax) == sizeof(pax_flag_t));
 CTASSERT((sizeof((struct thread *)NULL)->td_pax) == sizeof(pax_flag_t));
 
-/*
- * The PAX_HARDENING_{,NO}SHLIBRANDOM flags are
- * used from rtld.
- */
-CTASSERT(PAX_NOTE_SHLIBRANDOM == PAX_HARDENING_SHLIBRANDOM);
-CTASSERT(PAX_NOTE_NOSHLIBRANDOM == PAX_HARDENING_NOSHLIBRANDOM);
-
-
 SYSCTL_NODE(_hardening, OID_AUTO, pax, CTLFLAG_RD, 0,
     "PaX (exploit mitigation) features.");
-
-SYSCTL_UQUAD(_hardening, OID_AUTO, version, CTLFLAG_RD|CTLFLAG_CAPRD,
-    SYSCTL_NULL_UQUAD_PTR, __HardenedBSD_version, "HardenedBSD version");
 
 const char *pax_status_str[] = {
 	[PAX_FEATURE_DISABLED] = "disabled",
@@ -86,19 +75,6 @@ const char *pax_status_simple_str[] = {
 	[PAX_FEATURE_SIMPLE_ENABLED] = "enabled"
 };
 
-
-/*
- * @ brief Get current __HardenedBSD_version.
- *
- * @ return	__HardenedBSD_version
- */
-__noinline uint64_t
-pax_get_hardenedbsd_version(void)
-{
-	static const uint64_t HardenedBSD_version = __HardenedBSD_version;
-
-	return (HardenedBSD_version);
-}
 
 /*
  * @brief Get the current process prison.
@@ -329,8 +305,6 @@ static void
 pax_sysinit(void)
 {
 
-	printf("HBSD: initialize and check HardenedBSD features (version %"PRIu64").\n",
-	    (uint64_t)__HardenedBSD_version);
 }
 SYSINIT(pax, SI_SUB_PAX, SI_ORDER_FIRST, pax_sysinit, NULL);
 

@@ -341,9 +341,6 @@ pax_db_printf_flags_td(struct thread *td, pax_log_settings_t flags)
 
 __HARDENING_LOG_TEMPLATE(HBSD, INTERNAL, pax, internal);
 __HARDENING_LOG_TEMPLATE(HBSD, ASLR, pax, aslr);
-__HARDENING_LOG_TEMPLATE(HBSD, PAGEEXEC, pax, pageexec);
-__HARDENING_LOG_TEMPLATE(HBSD, MPROTECT, pax, mprotect);
-__HARDENING_LOG_TEMPLATE(HBSD, SEGVGUARD, pax, segvguard);
 
 void
 pax_log_internal_imgp(struct image_params *imgp, pax_log_settings_t flags, const char* fmt, ...)
