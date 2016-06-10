@@ -72,7 +72,7 @@ VOLUME_LABEL=	${REVISION:C/[.-]/_/g}_${BRANCH:C/[.-]/_/g}_${TARGET_ARCH}
 .endif
 
 .if !defined(VOLUME_LABEL) || empty(VOLUME_LABEL)
-VOLUME_LABEL=	HardenedBSD_Install
+VOLUME_LABEL=	fractalcells_Install
 .endif
 
 .if !exists(${DOCDIR})
@@ -279,7 +279,7 @@ packagesystem: base.txz kernel.txz ${EXTRA_PACKAGES}
 
 pkg-stage:
 .if !defined(NOPKG)
-	env REPOS_DIR=${.CURDIR}/pkg_repos/ \
+	env REPOS_DIR=${.CURDIR}/pkg_repos/ PORTSDIR=${PORTSDIR} \
 		sh ${.CURDIR}/scripts/pkg-stage.sh
 	mkdir -p ${.OBJDIR}/dvd/packages/repos/
 	cp ${.CURDIR}/scripts/FreeBSD_install_cdrom.conf \

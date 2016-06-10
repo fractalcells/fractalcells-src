@@ -27,7 +27,7 @@
 # $FreeBSD$
 
 clear
-echo "HardenedBSD Installer"
+echo "fractalcells Installer"
 echo "========================"
 echo
 

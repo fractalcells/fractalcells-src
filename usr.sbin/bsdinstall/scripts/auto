@@ -42,7 +42,7 @@ error() {
 	fi
 	test -n "$DISTDIR_IS_UNIONFS" && umount -f $BSDINSTALL_DISTDIR
 	test -f $PATH_FSTAB && bsdinstall umount
-	dialog --backtitle "HardenedBSD Installer" --title "Abort" \
+	dialog --backtitle "fractalcells Installer" --title "Abort" \
 	    --no-label "Exit" --yes-label "Restart" --yesno \
 	    "${msg}An installation step has been aborted. Would you like to restart the installation or exit the installer?" 0 0
 	if [ $? -ne 0 ]; then
@@ -120,7 +120,7 @@ if [ -f $BSDINSTALL_DISTDIR/MANIFEST ]; then
 
 	exec 3>&1
 	EXTRA_DISTS=$( eval dialog \
-	    --backtitle \"HardenedBSD Installer\" \
+	    --backtitle \"fractalcells Installer\" \
 	    --title \"Distribution Select\" --nocancel --separate-output \
 	    --checklist \"Choose optional system components to install:\" \
 	    0 0 0 $DISTMENU \
@@ -143,7 +143,7 @@ LOCAL_DISTRIBUTIONS=`echo $LOCAL_DISTRIBUTIONS`	# Trim white space
 FETCH_DISTRIBUTIONS=`echo $FETCH_DISTRIBUTIONS`	# Trim white space
 
 if [ -n "$FETCH_DISTRIBUTIONS" -a -n "$BSDINSTALL_CONFIGCURRENT" ]; then
-	dialog --backtitle "HardenedBSD Installer" --title "Network Installation" --msgbox "Some installation files were not found on the boot volume. The next few screens will allow you to configure networking so that they can be downloaded from the Internet." 0 0
+	dialog --backtitle "fractalcells Installer" --title "Network Installation" --msgbox "Some installation files were not found on the boot volume. The next few screens will allow you to configure networking so that they can be downloaded from the Internet." 0 0
 	bsdinstall netconfig || error
 	NETCONFIG_DONE=yes
 fi
@@ -253,32 +253,27 @@ if f_interactive; then
 	esac
 fi
 
-PMODES="\
-\"Auto (UFS)\" \"Guided Disk Setup\" \
-Manual \"Manual Disk Setup (experts)\" \
-Shell \"Open a shell and partition by hand\""
-
 CURARCH=$( uname -m )
 case $CURARCH in
 	amd64|i386)	# Booting ZFS Supported
-		PMODES="$PMODES \"Auto (ZFS)\" \"Guided Root-on-ZFS\""
+		PMODES=" \"Auto (ZFS)\" \"Guided Root-on-ZFS\""
 		;;
 	*)		# Booting ZFS Unspported
 		;;
 esac
 
+PMODES="$PMODES \
+Manual \"Manual Disk Setup (experts)\" \
+Shell \"Open a shell and partition by hand\""
+
 exec 3>&1
-PARTMODE=`echo $PMODES | xargs dialog --backtitle "HardenedBSD Installer" \
+PARTMODE=`echo $PMODES | xargs dialog --backtitle "fractalcells Installer" \
 	--title "Partitioning" \
 	--menu "How would you like to partition your disk?" \
 	0 0 0 2>&1 1>&3` || exit 1
 exec 3>&-
 
 case "$PARTMODE" in
-"Auto (UFS)")	# Guided
-	bsdinstall autopart || error "Partitioning error"
-	bsdinstall mount || error "Failed to mount filesystem"
-	;;
 "Shell")	# Shell
 	clear
 	echo "Use this shell to set up partitions for the new system. When finished, mount the system at $BSDINSTALL_CHROOT and place an fstab file for the new system at $PATH_FSTAB. Then type 'exit'. You can also enter the partition editor at any time by entering 'bsdinstall partedit'."
@@ -386,15 +381,15 @@ fi
 bsdinstall time
 bsdinstall services
 
-dialog --backtitle "HardenedBSD Installer" --title "Add User Accounts" --yesno \
+dialog --backtitle "fractalcells Installer" --title "Add User Accounts" --yesno \
     "Would you like to add users to the installed system now?" 0 0 && \
     bsdinstall adduser
 
 finalconfig() {
 	exec 3>&1
-	REVISIT=$(dialog --backtitle "HardenedBSD Installer" \
+	REVISIT=$(dialog --backtitle "fractalcells Installer" \
 	    --title "Final Configuration" --no-cancel --menu \
-	    "Setup of your HardenedBSD system is nearly complete. You can now modify your configuration choices. After this screen, you will have an opportunity to make more complex changes using a shell." 0 0 0 \
+	    "Setup of your fractalcells system is nearly complete. You can now modify your configuration choices. After this screen, you will have an opportunity to make more complex changes using a shell." 0 0 0 \
 		"Exit" "Apply configuration and exit installer" \
 		"Add User" "Add a user to the system" \
 		"Root Password" "Change root password" \
@@ -449,7 +444,7 @@ if [ ! -z "$BSDINSTALL_FETCHDEST" ]; then
 	rm -rf "$BSDINSTALL_FETCHDEST"
 fi
 
-dialog --backtitle "HardenedBSD Installer" --title "Manual Configuration" \
+dialog --backtitle "fractalcells Installer" --title "Manual Configuration" \
     --default-button no --yesno \
    "The installation is now finished. Before exiting the installer, would you like to open a shell in the new system to make any final manual modifications?" 0 0
 if [ $? -eq 0 ]; then

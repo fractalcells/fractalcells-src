@@ -68,7 +68,7 @@ case ${_BUILD_TYPE} in
 esac
 
 exec 3>&1
-MIRROR=`dialog --backtitle "HardenedBSD Installer" \
+MIRROR=`dialog --backtitle "fractalcells Installer" \
     --title "Mirror Selection - experimental and not all branch supported" --extra-button --extra-label "Other" \
     --menu "Please select the site closest to you or \"other\" if you'd like to specify a different choice.  Also note that not every site listed here carries more than the base distribution kits. Only Primary sites are guaranteed to carry the full range of possible distributions. Select a site that's close!" \
     0 0 0 \

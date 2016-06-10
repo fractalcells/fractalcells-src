@@ -1,0 +1,22 @@
+include HARDENEDBSD
+
+nooptions PAX_SEGVGUARD
+options PAX_INSECURE_MODE
+
+# Only the daring run -CURRENT with experimental patches, but without
+# debugging support
+nooptions WITNESS
+nooptions WITNESS_SKIPSPIN
+nooptions MALLOC_DEBUG_MAXZONES
+
+nooptions INVARIANTS
+nooptions INVARIANT_SUPPORT
+
+# Virtual networking for jails
+#options VIMAGE
+
+options COM_MULTIPORT
+
+# Add compat32 to allow Linux compat layer
+
+options COMPAT_FREEBSD32
