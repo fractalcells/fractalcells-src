@@ -2536,11 +2536,8 @@ vget(struct vnode *vp, int flags, struct thread *td)
 	 *
 	 * Upgrade our holdcnt to a usecount.
 	 */
-	if (vp->v_type != VCHR &&
-	    vfs_refcount_acquire_if_not_zero(&vp->v_usecount)) {
-		VNASSERT((vp->v_iflag & VI_OWEINACT) == 0, vp,
-		    ("vnode with usecount and VI_OWEINACT set"));
-	} else {
+	if (vp->v_type == VCHR ||
+	    !vfs_refcount_acquire_if_not_zero(&vp->v_usecount)) {
 		VI_LOCK(vp);
 		if ((vp->v_iflag & VI_OWEINACT) == 0) {
 			oweinact = 0;
@@ -2648,7 +2645,7 @@ vputx(struct vnode *vp, int func)
 	error = 0;
 
 	if (vp->v_usecount != 0) {
-		vprint("vputx: usecount not zero", vp);
+		vn_printf(vp, "vputx: usecount not zero for vnode ");
 		panic("vputx: usecount not zero");
 	}
 
@@ -3039,7 +3036,7 @@ loop:
 			busy++;
 #ifdef DIAGNOSTIC
 			if (busyprt)
-				vprint("vflush: busy vnode", vp);
+				vn_printf(vp, "vflush: busy vnode ");
 #endif
 		}
 		VOP_UNLOCK(vp, 0);
@@ -3235,7 +3232,13 @@ vgonel(struct vnode *vp)
 	    TAILQ_EMPTY(&vp->v_bufobj.bo_clean.bv_hd) &&
 	    vp->v_bufobj.bo_clean.bv_cnt == 0,
 	    ("vp %p bufobj not invalidated", vp));
-	vp->v_bufobj.bo_flag |= BO_DEAD;
+
+	/*
+	 * For VMIO bufobj, BO_DEAD is set in vm_object_terminate()
+	 * after the object's page queue is flushed.
+	 */
+	if (vp->v_bufobj.bo_object == NULL)
+		vp->v_bufobj.bo_flag |= BO_DEAD;
 	BO_UNLOCK(&vp->v_bufobj);
 
 	/*
@@ -3406,7 +3409,7 @@ DB_SHOW_COMMAND(lockedvnods, lockedvnodes)
 	TAILQ_FOREACH(mp, &mountlist, mnt_list) {
 		TAILQ_FOREACH(vp, &mp->mnt_nvnodelist, v_nmntvnodes) {
 			if (vp->v_type != VMARKER && VOP_ISLOCKED(vp))
-				vprint("", vp);
+				vn_printf(vp, "vnode ");
 		}
 	}
 }
@@ -4462,25 +4465,6 @@ assert_vop_elocked(struct vnode *vp, const char *str)
 	if (!IGNORE_LOCK(vp) && VOP_ISLOCKED(vp) != LK_EXCLUSIVE)
 		vfs_badlock("is not exclusive locked but should be", str, vp);
 }
-
-#if 0
-void
-assert_vop_elocked_other(struct vnode *vp, const char *str)
-{
-
-	if (!IGNORE_LOCK(vp) && VOP_ISLOCKED(vp) != LK_EXCLOTHER)
-		vfs_badlock("is not exclusive locked by another thread",
-		    str, vp);
-}
-
-void
-assert_vop_slocked(struct vnode *vp, const char *str)
-{
-
-	if (!IGNORE_LOCK(vp) && VOP_ISLOCKED(vp) != LK_SHARED)
-		vfs_badlock("is not locked shared but should be", str, vp);
-}
-#endif /* 0 */
 #endif /* DEBUG_VFS_LOCKS */
 
 void

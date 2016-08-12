@@ -1077,7 +1077,6 @@ sctp_init_asoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 	asoc->minrto = inp->sctp_ep.sctp_minrto;
 	asoc->maxrto = inp->sctp_ep.sctp_maxrto;
 
-	asoc->locked_on_sending = NULL;
 	asoc->stream_locked_on = 0;
 	asoc->ecn_echo_cnt_onq = 0;
 	asoc->stream_locked = 0;
@@ -1139,7 +1138,7 @@ sctp_init_asoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb,
 		asoc->strmout[i].stream_no = i;
 		asoc->strmout[i].last_msg_incomplete = 0;
 		asoc->strmout[i].state = SCTP_STREAM_OPENING;
-		asoc->ss_functions.sctp_ss_init_stream(&asoc->strmout[i], NULL);
+		asoc->ss_functions.sctp_ss_init_stream(stcb, &asoc->strmout[i], NULL);
 	}
 	asoc->ss_functions.sctp_ss_init(stcb, asoc, 0);
 
@@ -2933,7 +2932,8 @@ sctp_notify_send_failed(struct sctp_tcb *stcb, uint8_t sent, uint32_t error,
 	struct sctp_send_failed *ssf;
 	struct sctp_send_failed_event *ssfe;
 	struct sctp_queued_to_read *control;
-	int length;
+	struct sctp_chunkhdr *chkhdr;
+	int notifhdr_len, chk_len, chkhdr_len, padding_len, payload_len;
 
 	if ((stcb == NULL) ||
 	    (sctp_stcb_is_feature_off(stcb->sctp_ep, stcb, SCTP_PCB_FLAGS_RECVSENDFAILEVNT) &&
@@ -2942,27 +2942,49 @@ sctp_notify_send_failed(struct sctp_tcb *stcb, uint8_t sent, uint32_t error,
 		return;
 	}
 	if (sctp_stcb_is_feature_on(stcb->sctp_ep, stcb, SCTP_PCB_FLAGS_RECVNSENDFAILEVNT)) {
-		length = sizeof(struct sctp_send_failed_event);
+		notifhdr_len = sizeof(struct sctp_send_failed_event);
 	} else {
-		length = sizeof(struct sctp_send_failed);
+		notifhdr_len = sizeof(struct sctp_send_failed);
 	}
-	m_notify = sctp_get_mbuf_for_msg(length, 0, M_NOWAIT, 1, MT_DATA);
+	m_notify = sctp_get_mbuf_for_msg(notifhdr_len, 0, M_NOWAIT, 1, MT_DATA);
 	if (m_notify == NULL)
 		/* no space left */
 		return;
-	SCTP_BUF_LEN(m_notify) = 0;
+	SCTP_BUF_LEN(m_notify) = notifhdr_len;
+	if (stcb->asoc.idata_supported) {
+		chkhdr_len = sizeof(struct sctp_idata_chunk);
+	} else {
+		chkhdr_len = sizeof(struct sctp_data_chunk);
+	}
+	/* Use some defaults in case we can't access the chunk header */
+	if (chk->send_size >= chkhdr_len) {
+		payload_len = chk->send_size - chkhdr_len;
+	} else {
+		payload_len = 0;
+	}
+	padding_len = 0;
+	if (chk->data != NULL) {
+		chkhdr = mtod(chk->data, struct sctp_chunkhdr *);
+		if (chkhdr != NULL) {
+			chk_len = ntohs(chkhdr->chunk_length);
+			if ((chk_len >= chkhdr_len) &&
+			    (chk->send_size >= chk_len) &&
+			    (chk->send_size - chk_len < 4)) {
+				padding_len = chk->send_size - chk_len;
+				payload_len = chk->send_size - chkhdr_len - padding_len;
+			}
+		}
+	}
 	if (sctp_stcb_is_feature_on(stcb->sctp_ep, stcb, SCTP_PCB_FLAGS_RECVNSENDFAILEVNT)) {
 		ssfe = mtod(m_notify, struct sctp_send_failed_event *);
-		memset(ssfe, 0, length);
+		memset(ssfe, 0, notifhdr_len);
 		ssfe->ssfe_type = SCTP_SEND_FAILED_EVENT;
 		if (sent) {
 			ssfe->ssfe_flags = SCTP_DATA_SENT;
 		} else {
 			ssfe->ssfe_flags = SCTP_DATA_UNSENT;
 		}
-		length += chk->send_size;
-		length -= sizeof(struct sctp_data_chunk);
-		ssfe->ssfe_length = length;
+		ssfe->ssfe_length = (uint32_t) (notifhdr_len + payload_len);
 		ssfe->ssfe_error = error;
 		/* not exactly what the user sent in, but should be close :) */
 		ssfe->ssfe_info.snd_sid = chk->rec.data.stream_number;
@@ -2971,39 +2993,33 @@ sctp_notify_send_failed(struct sctp_tcb *stcb, uint8_t sent, uint32_t error,
 		ssfe->ssfe_info.snd_context = chk->rec.data.context;
 		ssfe->ssfe_info.snd_assoc_id = sctp_get_associd(stcb);
 		ssfe->ssfe_assoc_id = sctp_get_associd(stcb);
-		SCTP_BUF_LEN(m_notify) = sizeof(struct sctp_send_failed_event);
 	} else {
 		ssf = mtod(m_notify, struct sctp_send_failed *);
-		memset(ssf, 0, length);
+		memset(ssf, 0, notifhdr_len);
 		ssf->ssf_type = SCTP_SEND_FAILED;
 		if (sent) {
 			ssf->ssf_flags = SCTP_DATA_SENT;
 		} else {
 			ssf->ssf_flags = SCTP_DATA_UNSENT;
 		}
-		length += chk->send_size;
-		length -= sizeof(struct sctp_data_chunk);
-		ssf->ssf_length = length;
+		ssf->ssf_length = (uint32_t) (notifhdr_len + payload_len);
 		ssf->ssf_error = error;
 		/* not exactly what the user sent in, but should be close :) */
-		bzero(&ssf->ssf_info, sizeof(ssf->ssf_info));
 		ssf->ssf_info.sinfo_stream = chk->rec.data.stream_number;
-		ssf->ssf_info.sinfo_ssn = chk->rec.data.stream_seq;
+		ssf->ssf_info.sinfo_ssn = (uint16_t) chk->rec.data.stream_seq;
 		ssf->ssf_info.sinfo_flags = chk->rec.data.rcv_flags;
 		ssf->ssf_info.sinfo_ppid = chk->rec.data.payloadtype;
 		ssf->ssf_info.sinfo_context = chk->rec.data.context;
 		ssf->ssf_info.sinfo_assoc_id = sctp_get_associd(stcb);
 		ssf->ssf_assoc_id = sctp_get_associd(stcb);
-		SCTP_BUF_LEN(m_notify) = sizeof(struct sctp_send_failed);
 	}
-	if (chk->data) {
-		/*
-		 * trim off the sctp chunk header(it should be there)
-		 */
-		if (chk->send_size >= sizeof(struct sctp_data_chunk)) {
-			m_adj(chk->data, sizeof(struct sctp_data_chunk));
+	if (chk->data != NULL) {
+		/* Trim off the sctp chunk header (it should be there) */
+		if (chk->send_size == chkhdr_len + payload_len + padding_len) {
+			m_adj(chk->data, chkhdr_len);
+			m_adj(chk->data, -padding_len);
 			sctp_mbuf_crush(chk->data);
-			chk->send_size -= sizeof(struct sctp_data_chunk);
+			chk->send_size -= (chkhdr_len + padding_len);
 		}
 	}
 	SCTP_BUF_NEXT(m_notify) = chk->data;
@@ -3048,7 +3064,7 @@ sctp_notify_send_failed2(struct sctp_tcb *stcb, uint32_t error,
 	struct sctp_send_failed *ssf;
 	struct sctp_send_failed_event *ssfe;
 	struct sctp_queued_to_read *control;
-	int length;
+	int notifhdr_len;
 
 	if ((stcb == NULL) ||
 	    (sctp_stcb_is_feature_off(stcb->sctp_ep, stcb, SCTP_PCB_FLAGS_RECVSENDFAILEVNT) &&
@@ -3057,23 +3073,22 @@ sctp_notify_send_failed2(struct sctp_tcb *stcb, uint32_t error,
 		return;
 	}
 	if (sctp_stcb_is_feature_on(stcb->sctp_ep, stcb, SCTP_PCB_FLAGS_RECVNSENDFAILEVNT)) {
-		length = sizeof(struct sctp_send_failed_event);
+		notifhdr_len = sizeof(struct sctp_send_failed_event);
 	} else {
-		length = sizeof(struct sctp_send_failed);
+		notifhdr_len = sizeof(struct sctp_send_failed);
 	}
-	m_notify = sctp_get_mbuf_for_msg(length, 0, M_NOWAIT, 1, MT_DATA);
+	m_notify = sctp_get_mbuf_for_msg(notifhdr_len, 0, M_NOWAIT, 1, MT_DATA);
 	if (m_notify == NULL) {
 		/* no space left */
 		return;
 	}
-	SCTP_BUF_LEN(m_notify) = 0;
+	SCTP_BUF_LEN(m_notify) = notifhdr_len;
 	if (sctp_stcb_is_feature_on(stcb->sctp_ep, stcb, SCTP_PCB_FLAGS_RECVNSENDFAILEVNT)) {
 		ssfe = mtod(m_notify, struct sctp_send_failed_event *);
-		memset(ssfe, 0, length);
+		memset(ssfe, 0, notifhdr_len);
 		ssfe->ssfe_type = SCTP_SEND_FAILED_EVENT;
 		ssfe->ssfe_flags = SCTP_DATA_UNSENT;
-		length += sp->length;
-		ssfe->ssfe_length = length;
+		ssfe->ssfe_length = (uint32_t) (notifhdr_len + sp->length);
 		ssfe->ssfe_error = error;
 		/* not exactly what the user sent in, but should be close :) */
 		ssfe->ssfe_info.snd_sid = sp->stream;
@@ -3086,14 +3101,12 @@ sctp_notify_send_failed2(struct sctp_tcb *stcb, uint32_t error,
 		ssfe->ssfe_info.snd_context = sp->context;
 		ssfe->ssfe_info.snd_assoc_id = sctp_get_associd(stcb);
 		ssfe->ssfe_assoc_id = sctp_get_associd(stcb);
-		SCTP_BUF_LEN(m_notify) = sizeof(struct sctp_send_failed_event);
 	} else {
 		ssf = mtod(m_notify, struct sctp_send_failed *);
-		memset(ssf, 0, length);
+		memset(ssf, 0, notifhdr_len);
 		ssf->ssf_type = SCTP_SEND_FAILED;
 		ssf->ssf_flags = SCTP_DATA_UNSENT;
-		length += sp->length;
-		ssf->ssf_length = length;
+		ssf->ssf_length = (uint32_t) (notifhdr_len + sp->length);
 		ssf->ssf_error = error;
 		/* not exactly what the user sent in, but should be close :) */
 		ssf->ssf_info.sinfo_stream = sp->stream;
@@ -3107,7 +3120,6 @@ sctp_notify_send_failed2(struct sctp_tcb *stcb, uint32_t error,
 		ssf->ssf_info.sinfo_context = sp->context;
 		ssf->ssf_info.sinfo_assoc_id = sctp_get_associd(stcb);
 		ssf->ssf_assoc_id = sctp_get_associd(stcb);
-		SCTP_BUF_LEN(m_notify) = sizeof(struct sctp_send_failed);
 	}
 	SCTP_BUF_NEXT(m_notify) = sp->data;
 
@@ -3894,10 +3906,10 @@ sctp_report_all_outbound(struct sctp_tcb *stcb, uint16_t error, int holds_lock, 
 		/* For each stream */
 		outs = &asoc->strmout[i];
 		/* clean up any sends there */
-		asoc->locked_on_sending = NULL;
 		TAILQ_FOREACH_SAFE(sp, &outs->outqueue, next, nsp) {
-			asoc->stream_queue_cnt--;
+			atomic_subtract_int(&asoc->stream_queue_cnt, 1);
 			TAILQ_REMOVE(&outs->outqueue, sp, next);
+			stcb->asoc.ss_functions.sctp_ss_remove_from_stream(stcb, asoc, outs, sp, holds_lock);
 			sctp_free_spbufspace(stcb, asoc, sp);
 			if (sp->data) {
 				sctp_ulp_notify(SCTP_NOTIFY_SPECIAL_SP_FAIL, stcb,
@@ -4865,6 +4877,9 @@ sctp_release_pr_sctp_chunk(struct sctp_tcb *stcb, struct sctp_tmit_chunk *tp1,
 				stcb->asoc.pr_sctp_cnt++;
 			}
 			chk->rec.data.rcv_flags |= SCTP_DATA_LAST_FRAG;
+			if (sp->sinfo_flags & SCTP_UNORDERED) {
+				chk->rec.data.rcv_flags |= SCTP_DATA_UNORDERED;
+			}
 			if (stcb->asoc.idata_supported == 0) {
 				if ((sp->sinfo_flags & SCTP_UNORDERED) == 0) {
 					strq->next_mid_ordered++;
@@ -5482,20 +5497,16 @@ restart_nosblocks:
 	}
 	/* Clear the held length since there is something to read */
 	control->held_length = 0;
-	if (hold_rlock) {
-		SCTP_INP_READ_UNLOCK(inp);
-		hold_rlock = 0;
-	}
 found_one:
 	/*
 	 * If we reach here, control has a some data for us to read off.
 	 * Note that stcb COULD be NULL.
 	 */
-	control->some_taken++;
-	if (hold_sblock) {
-		SOCKBUF_UNLOCK(&so->so_rcv);
-		hold_sblock = 0;
+	if (hold_rlock == 0) {
+		hold_rlock = 1;
+		SCTP_INP_READ_LOCK(inp);
 	}
+	control->some_taken++;
 	stcb = control->stcb;
 	if (stcb) {
 		if ((control->do_not_ref_stcb == 0) &&
@@ -5668,6 +5679,14 @@ found_one:
 			sctp_recover_scope_mac(from6, (&lsa6));
 		}
 #endif
+	}
+	if (hold_rlock) {
+		SCTP_INP_READ_UNLOCK(inp);
+		hold_rlock = 0;
+	}
+	if (hold_sblock) {
+		SOCKBUF_UNLOCK(&so->so_rcv);
+		hold_sblock = 0;
 	}
 	/* now copy out what data we can */
 	if (mp == NULL) {
@@ -6084,9 +6103,9 @@ out:
 			goto stage_left;
 #endif
 		}
-		atomic_add_int(&stcb->asoc.refcnt, -1);
 		/* Save the value back for next time */
 		stcb->freed_by_sorcv_sincelast = freed_so_far;
+		atomic_add_int(&stcb->asoc.refcnt, -1);
 	}
 	if (SCTP_BASE_SYSCTL(sctp_logging_level) & SCTP_RECV_RWND_LOGGING_ENABLE) {
 		if (stcb) {

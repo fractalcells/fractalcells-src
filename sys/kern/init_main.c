@@ -490,7 +490,7 @@ proc0_init(void *dummy __unused)
 #endif
 	p->p_usrstack = USRSTACK;
 	p->p_psstrings = PS_STRINGS;
-	knlist_init_mtx(&p->p_klist, &p->p_mtx);
+	p->p_klist = knlist_alloc(&p->p_mtx);
 	STAILQ_INIT(&p->p_ktr);
 	p->p_nice = NZERO;
 	/* pid_max cannot be greater than PID_MAX */
@@ -503,7 +503,7 @@ proc0_init(void *dummy __unused)
 	td->td_lend_user_pri = PRI_MAX;
 	td->td_priority = PVM;
 	td->td_base_pri = PVM;
-	td->td_oncpu = 0;
+	td->td_oncpu = curcpu;
 	td->td_flags = TDF_INMEM;
 	td->td_pflags = TDP_KTHREAD;
 	td->td_cpuset = cpuset_thread0();

@@ -77,6 +77,7 @@ cloudabi64_fetch_syscall_args(struct thread *td, struct syscall_args *sa)
 	if (sa->code >= CLOUDABI64_SYS_MAXSYSCALL)
 		return (ENOSYS);
 	sa->callp = &cloudabi64_sysent[sa->code];
+	sa->narg = sa->callp->sy_narg;
 
 	/* Fetch system call arguments. */
 	for (i = 0; i < MAXARGS; i++)
@@ -164,7 +165,6 @@ static struct sysentvec cloudabi64_elf_sysvec = {
 	.sv_pagesize		= PAGE_SIZE,
 	.sv_minuser		= VM_MIN_ADDRESS,
 	.sv_maxuser		= VM_MAXUSER_ADDRESS,
-	.sv_usrstack		= USRSTACK,
 	.sv_stackprot		= VM_PROT_READ | VM_PROT_WRITE,
 	.sv_copyout_strings	= cloudabi64_copyout_strings,
 	.sv_setregs		= cloudabi64_proc_setregs,

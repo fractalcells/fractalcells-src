@@ -380,8 +380,13 @@ DB_SHOW_COMMAND(thread, db_show_thread)
 		db_printf(" lock: %s  turnstile: %p\n", td->td_lockname,
 		    td->td_blocked);
 	if (TD_ON_SLEEPQ(td))
-		db_printf(" wmesg: %s  wchan: %p\n", td->td_wmesg,
-		    td->td_wchan);
+		db_printf(
+	    " wmesg: %s  wchan: %p sleeptimo %lx. %jx (curr %lx. %jx)\n",
+		    td->td_wmesg, td->td_wchan,
+		    (long)sbttobt(td->td_sleeptimo).sec,
+		    (uintmax_t)sbttobt(td->td_sleeptimo).frac,
+		    (long)sbttobt(sbinuptime()).sec,
+		    (uintmax_t)sbttobt(sbinuptime()).frac);
 	db_printf(" priority: %d\n", td->td_priority);
 	db_printf(" container lock: %s (%p)\n", lock->lo_name, lock);
 	if (td->td_swvoltick != 0) {
@@ -440,9 +445,16 @@ DB_SHOW_COMMAND(proc, db_show_proc)
 		    p->p_leader);
 	if (p->p_sysent != NULL)
 		db_printf(" ABI: %s\n", p->p_sysent->sv_name);
-	if (p->p_args != NULL)
-		db_printf(" arguments: %.*s\n", (int)p->p_args->ar_length,
-		    p->p_args->ar_args);
+	if (p->p_args != NULL) {
+		db_printf(" arguments: ");
+		for (i = 0; i < (int)p->p_args->ar_length; i++) {
+			if (p->p_args->ar_args[i] == '\0')
+				db_printf(" ");
+			else
+				db_printf("%c", p->p_args->ar_args[i]);
+		}
+		db_printf("\n");
+	}
 #ifdef PAX
 	pax_db_printf_flags(p, PAX_LOG_DEFAULT);
 #endif
