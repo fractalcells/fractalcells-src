@@ -176,6 +176,7 @@ trap(struct trapframe *frame)
 #endif
 	struct thread *td = curthread;
 	struct proc *p = td->td_proc;
+	register_t dr6;
 	int i = 0, ucode = 0, code;
 	u_int type;
 	register_t addr = 0;
@@ -236,7 +237,7 @@ trap(struct trapframe *frame)
 		 * interrupts disabled until they are accidentally
 		 * enabled later.
 		 */
-		if (ISPL(frame->tf_cs) == SEL_UPL)
+		if (TRAPF_USERMODE(frame))
 			uprintf(
 			    "pid %ld (%s): trap %d with interrupts disabled\n",
 			    (long)curproc->p_pid, curthread->td_name, type);
@@ -260,7 +261,7 @@ trap(struct trapframe *frame)
 
 	code = frame->tf_err;
 
-        if (ISPL(frame->tf_cs) == SEL_UPL) {
+	if (TRAPF_USERMODE(frame)) {
 		/* user trap */
 
 		td->td_pticks = 0;
@@ -540,8 +541,7 @@ trap(struct trapframe *frame)
 				 * Reset breakpoint bits because the
 				 * processor doesn't
 				 */
-				/* XXX check upper bits here */
-				load_dr6(rdr6() & 0xfffffff0);
+				load_dr6(rdr6() & ~0xf);
 				goto out;
 			}
 			/*
@@ -553,7 +553,10 @@ trap(struct trapframe *frame)
 			 * Otherwise, debugger traps "can't happen".
 			 */
 #ifdef KDB
-			if (kdb_trap(type, 0, frame))
+			/* XXX %dr6 is not quite reentrant. */
+			dr6 = rdr6();
+			load_dr6(dr6 & ~0x4000);
+			if (kdb_trap(type, dr6, frame))
 				goto out;
 #endif
 			break;
@@ -787,7 +790,7 @@ trap_fatal(frame, eva)
 	else
 		msg = "UNKNOWN";
 	printf("\n\nFatal trap %d: %s while in %s mode\n", type, msg,
-	    ISPL(frame->tf_cs) == SEL_UPL ? "user" : "kernel");
+	    TRAPF_USERMODE(frame) ? "user" : "kernel");
 #ifdef SMP
 	/* two separate prints in case of a trap on an unmapped page */
 	printf("cpuid = %d; ", PCPU_GET(cpuid));
@@ -804,7 +807,7 @@ trap_fatal(frame, eva)
 	}
 	printf("instruction pointer	= 0x%lx:0x%lx\n",
 	       frame->tf_cs & 0xffff, frame->tf_rip);
-        if (ISPL(frame->tf_cs) == SEL_UPL) {
+	if (TF_HAS_STACKREGS(frame)) {
 		ss = frame->tf_ss & 0xffff;
 		esp = frame->tf_rsp;
 	} else {
@@ -934,7 +937,7 @@ amd64_syscall(struct thread *td, int traced)
 	ksiginfo_t ksi;
 
 #ifdef DIAGNOSTIC
-	if (ISPL(td->td_frame->tf_cs) != SEL_UPL) {
+	if (!TRAPF_USERMODE(td->td_frame)) {
 		panic("syscall");
 		/* NOT REACHED */
 	}

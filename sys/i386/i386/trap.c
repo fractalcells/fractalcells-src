@@ -189,6 +189,7 @@ trap(struct trapframe *frame)
 #endif
 	struct thread *td = curthread;
 	struct proc *p = td->td_proc;
+	register_t dr6;
 	int i = 0, ucode = 0, code;
 	u_int type;
 	register_t addr = 0;
@@ -267,7 +268,8 @@ trap(struct trapframe *frame)
 		 * interrupts disabled until they are accidentally
 		 * enabled later.
 		 */
-		if (ISPL(frame->tf_cs) == SEL_UPL || (frame->tf_eflags & PSL_VM))
+		if (TRAPF_USERMODE(frame) &&
+		    (curpcb->pcb_flags & PCB_VM86CALL) == 0)
 			uprintf(
 			    "pid %ld (%s): trap %d with interrupts disabled\n",
 			    (long)curproc->p_pid, curthread->td_name, type);
@@ -307,9 +309,7 @@ trap(struct trapframe *frame)
 			enable_intr();
 	}
 
-        if ((ISPL(frame->tf_cs) == SEL_UPL) ||
-	    ((frame->tf_eflags & PSL_VM) && 
-		!(curpcb->pcb_flags & PCB_VM86CALL))) {
+        if (TRAPF_USERMODE(frame) && (curpcb->pcb_flags & PCB_VM86CALL) == 0) {
 		/* user trap */
 
 		td->td_pticks = 0;
@@ -335,6 +335,7 @@ trap(struct trapframe *frame)
 					goto out;
 			}
 #endif
+user_trctrap_out:
 			frame->tf_eflags &= ~PSL_T;
 			i = SIGTRAP;
 			ucode = (type == T_TRCTRAP ? TRAP_TRACE : TRAP_BRKPT);
@@ -360,6 +361,11 @@ trap(struct trapframe *frame)
 		case T_STKFLT:		/* stack fault */
 			if (frame->tf_eflags & PSL_VM) {
 				i = vm86_emulate((struct vm86frame *)frame);
+				if (i == SIGTRAP) {
+					type = T_TRCTRAP;
+					load_dr6(rdr6() | 0x4000);
+					goto user_trctrap_out;
+				}
 				if (i == 0)
 					goto user;
 				break;
@@ -566,6 +572,11 @@ trap(struct trapframe *frame)
 		case T_STKFLT:		/* stack fault */
 			if (frame->tf_eflags & PSL_VM) {
 				i = vm86_emulate((struct vm86frame *)frame);
+				if (i == SIGTRAP) {
+					type = T_TRCTRAP;
+					load_dr6(rdr6() | 0x4000);
+					goto kernel_trctrap;
+				}
 				if (i != 0)
 					/*
 					 * returns to original process
@@ -654,6 +665,7 @@ trap(struct trapframe *frame)
 			break;
 
 		case T_TRCTRAP:	 /* trace trap */
+kernel_trctrap:
 			if (frame->tf_eip == (int)IDTVEC(lcall_syscall)) {
 				/*
 				 * We've just entered system mode via the
@@ -687,7 +699,7 @@ trap(struct trapframe *frame)
 				 * Reset breakpoint bits because the
 				 * processor doesn't
 				 */
-				load_dr6(rdr6() & 0xfffffff0);
+				load_dr6(rdr6() & ~0xf);
 				goto out;
 			}
 			/*
@@ -699,7 +711,10 @@ trap(struct trapframe *frame)
 			 * Otherwise, debugger traps "can't happen".
 			 */
 #ifdef KDB
-			if (kdb_trap(type, 0, frame))
+			/* XXX %dr6 is not quite reentrant. */
+			dr6 = rdr6();
+			load_dr6(dr6 & ~0x4000);
+			if (kdb_trap(type, dr6, frame))
 				goto out;
 #endif
 			break;
@@ -953,7 +968,7 @@ trap_fatal(frame, eva)
 	}
 	printf("instruction pointer	= 0x%x:0x%x\n",
 	       frame->tf_cs & 0xffff, frame->tf_eip);
-        if ((ISPL(frame->tf_cs) == SEL_UPL) || (frame->tf_eflags & PSL_VM)) {
+        if (TF_HAS_STACKREGS(frame)) {
 		ss = frame->tf_ss & 0xffff;
 		esp = frame->tf_esp;
 	} else {
@@ -1107,7 +1122,8 @@ syscall(struct trapframe *frame)
 	ksiginfo_t ksi;
 
 #ifdef DIAGNOSTIC
-	if (ISPL(frame->tf_cs) != SEL_UPL) {
+	if (!(TRAPF_USERMODE(frame) &&
+	    (curpcb->pcb_flags & PCB_VM86CALL) == 0)) {
 		panic("syscall");
 		/* NOT REACHED */
 	}
