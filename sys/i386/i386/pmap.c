@@ -318,7 +318,6 @@ static boolean_t pmap_is_modified_pvh(struct md_page *pvh);
 static boolean_t pmap_is_referenced_pvh(struct md_page *pvh);
 static void pmap_kenter_attr(vm_offset_t va, vm_paddr_t pa, int mode);
 static void pmap_kenter_pde(vm_offset_t va, pd_entry_t newpde);
-static vm_page_t pmap_lookup_pt_page(pmap_t pmap, vm_offset_t va);
 static void pmap_pde_attr(pd_entry_t *pde, int cache_bits);
 static void pmap_promote_pde(pmap_t pmap, pd_entry_t *pde, vm_offset_t va);
 static boolean_t pmap_protect_pde(pmap_t pmap, pd_entry_t *pde, vm_offset_t sva,
@@ -328,7 +327,7 @@ static void pmap_remove_pde(pmap_t pmap, pd_entry_t *pdq, vm_offset_t sva,
     struct spglist *free);
 static int pmap_remove_pte(pmap_t pmap, pt_entry_t *ptq, vm_offset_t sva,
     struct spglist *free);
-static void pmap_remove_pt_page(pmap_t pmap, vm_page_t mpte);
+static vm_page_t pmap_remove_pt_page(pmap_t pmap, vm_offset_t va);
 static void pmap_remove_page(struct pmap *pmap, vm_offset_t va,
     struct spglist *free);
 static void pmap_remove_entry(struct pmap *pmap, vm_page_t m,
@@ -1713,29 +1712,17 @@ pmap_insert_pt_page(pmap_t pmap, vm_page_t mpte)
 }
 
 /*
- * Looks for a page table page mapping the specified virtual address in the
- * specified pmap's collection of idle page table pages.  Returns NULL if there
- * is no page table page corresponding to the specified virtual address.
+ * Removes the page table page mapping the specified virtual address from the
+ * specified pmap's collection of idle page table pages, and returns it.
+ * Otherwise, returns NULL if there is no page table page corresponding to the
+ * specified virtual address.
  */
 static __inline vm_page_t
-pmap_lookup_pt_page(pmap_t pmap, vm_offset_t va)
+pmap_remove_pt_page(pmap_t pmap, vm_offset_t va)
 {
 
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
-	return (vm_radix_lookup(&pmap->pm_root, va >> PDRSHIFT));
-}
-
-/*
- * Removes the specified page table page from the specified pmap's collection
- * of idle page table pages.  The specified page table page must be a member of
- * the pmap's collection.
- */
-static __inline void
-pmap_remove_pt_page(pmap_t pmap, vm_page_t mpte)
-{
-
-	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
-	vm_radix_remove(&pmap->pm_root, mpte->pindex);
+	return (vm_radix_remove(&pmap->pm_root, va >> PDRSHIFT));
 }
 
 /*
@@ -2630,10 +2617,8 @@ pmap_demote_pde(pmap_t pmap, pd_entry_t *pde, vm_offset_t va)
 	oldpde = *pde;
 	KASSERT((oldpde & (PG_PS | PG_V)) == (PG_PS | PG_V),
 	    ("pmap_demote_pde: oldpde is missing PG_PS and/or PG_V"));
-	if ((oldpde & PG_A) != 0 && (mpte = pmap_lookup_pt_page(pmap, va)) !=
-	    NULL)
-		pmap_remove_pt_page(pmap, mpte);
-	else {
+	if ((oldpde & PG_A) == 0 || (mpte = pmap_remove_pt_page(pmap, va)) ==
+	    NULL) {
 		KASSERT((oldpde & PG_W) == 0,
 		    ("pmap_demote_pde: page table page for a wired mapping"
 		    " is missing"));
@@ -2770,11 +2755,10 @@ pmap_remove_kernel_pde(pmap_t pmap, pd_entry_t *pde, vm_offset_t va)
 	vm_page_t mpte;
 
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
-	mpte = pmap_lookup_pt_page(pmap, va);
+	mpte = pmap_remove_pt_page(pmap, va);
 	if (mpte == NULL)
 		panic("pmap_remove_kernel_pde: Missing pt page.");
 
-	pmap_remove_pt_page(pmap, mpte);
 	mptepa = VM_PAGE_TO_PHYS(mpte);
 	newpde = mptepa | PG_M | PG_A | PG_RW | PG_V;
 
@@ -2841,9 +2825,8 @@ pmap_remove_pde(pmap_t pmap, pd_entry_t *pdq, vm_offset_t sva,
 	if (pmap == kernel_pmap) {
 		pmap_remove_kernel_pde(pmap, pdq, sva);
 	} else {
-		mpte = pmap_lookup_pt_page(pmap, sva);
+		mpte = pmap_remove_pt_page(pmap, sva);
 		if (mpte != NULL) {
-			pmap_remove_pt_page(pmap, mpte);
 			pmap->pm_stats.resident_count--;
 			KASSERT(mpte->wire_count == NPTEPG,
 			    ("pmap_remove_pde: pte page wire count error"));
@@ -3466,11 +3449,14 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 	PMAP_LOCK(pmap);
 	sched_pin();
 
-	/*
-	 * In the case that a page table page is not
-	 * resident, we are creating it here.
-	 */
+	pde = pmap_pde(pmap, va);
 	if (va < VM_MAXUSER_ADDRESS) {
+		/*
+		 * va is for UVA.
+		 * In the case that a page table page is not resident,
+		 * we are creating it here.  pmap_allocpte() handles
+		 * demotion.
+		 */
 		mpte = pmap_allocpte(pmap, va, flags);
 		if (mpte == NULL) {
 			KASSERT((flags & PMAP_ENTER_NOSLEEP) != 0,
@@ -3480,19 +3466,28 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 			PMAP_UNLOCK(pmap);
 			return (KERN_RESOURCE_SHORTAGE);
 		}
+	} else {
+		/*
+		 * va is for KVA, so pmap_demote_pde() will never fail
+		 * to install a page table page.  PG_V is also
+		 * asserted by pmap_demote_pde().
+		 */
+		KASSERT(pde != NULL && (*pde & PG_V) != 0,
+		    ("KVA %#x invalid pde pdir %#jx", va,
+		    (uintmax_t)pmap->pm_pdir[PTDPTDI]));
+		if ((*pde & PG_PS) != 0)
+			pmap_demote_pde(pmap, pde, va);
 	}
-
-	pde = pmap_pde(pmap, va);
-	if ((*pde & PG_PS) != 0)
-		panic("pmap_enter: attempted pmap_enter on 4MB page");
 	pte = pmap_pte_quick(pmap, va);
 
 	/*
-	 * Page Directory table entry not valid, we need a new PT page
+	 * Page Directory table entry is not valid, which should not
+	 * happen.  We should have either allocated the page table
+	 * page or demoted the existing mapping above.
 	 */
 	if (pte == NULL) {
 		panic("pmap_enter: invalid page directory pdir=%#jx, va=%#x",
-			(uintmax_t)pmap->pm_pdir[PTDPTDI], va);
+		    (uintmax_t)pmap->pm_pdir[PTDPTDI], va);
 	}
 
 	pa = VM_PAGE_TO_PHYS(m);
@@ -4530,9 +4525,8 @@ pmap_remove_pages(pmap_t pmap)
 							if (TAILQ_EMPTY(&mt->md.pv_list))
 								vm_page_aflag_clear(mt, PGA_WRITEABLE);
 					}
-					mpte = pmap_lookup_pt_page(pmap, pv->pv_va);
+					mpte = pmap_remove_pt_page(pmap, pv->pv_va);
 					if (mpte != NULL) {
-						pmap_remove_pt_page(pmap, mpte);
 						pmap->pm_stats.resident_count--;
 						KASSERT(mpte->wire_count == NPTEPG,
 						    ("pmap_remove_pages: pte page wire count error"));

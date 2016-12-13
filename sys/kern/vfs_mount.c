@@ -522,6 +522,8 @@ vfs_mount_destroy(struct mount *mp)
 		panic("vfs_mount_destroy: nonzero nvnodelistsize");
 	if (mp->mnt_activevnodelistsize != 0)
 		panic("vfs_mount_destroy: nonzero activevnodelistsize");
+	if (mp->mnt_tmpfreevnodelistsize != 0)
+		panic("vfs_mount_destroy: nonzero tmpfreevnodelistsize");
 	if (mp->mnt_lockref != 0)
 		panic("vfs_mount_destroy: nonzero lock refcount");
 	MNT_IUNLOCK(mp);
@@ -938,6 +940,11 @@ vfs_domount_update(
 	VOP_UNLOCK(vp, 0);
 
 	MNT_ILOCK(mp);
+	if ((mp->mnt_kern_flag & MNTK_UNMOUNT) != 0) {
+		MNT_IUNLOCK(mp);
+		error = EBUSY;
+		goto end;
+	}
 	mp->mnt_flag &= ~MNT_UPDATEMASK;
 	mp->mnt_flag |= fsflags & (MNT_RELOAD | MNT_FORCE | MNT_UPDATE |
 	    MNT_SNAPSHOT | MNT_ROOTFS | MNT_UPDATEMASK | MNT_RDONLY);
@@ -1233,6 +1240,24 @@ vfs_check_usecounts(struct mount *mp)
 	return (0);
 }
 
+static void
+dounmount_cleanup(struct mount *mp, struct vnode *coveredvp, int mntkflags)
+{
+
+	mtx_assert(MNT_MTX(mp), MA_OWNED);
+	mp->mnt_kern_flag &= ~mntkflags;
+	if ((mp->mnt_kern_flag & MNTK_MWAIT) != 0) {
+		mp->mnt_kern_flag &= ~MNTK_MWAIT;
+		wakeup(mp);
+	}
+	MNT_IUNLOCK(mp);
+	if (coveredvp != NULL) {
+		VOP_UNLOCK(coveredvp, 0);
+		vdrop(coveredvp);
+	}
+	vn_finished_write(mp);
+}
+
 /*
  * Do the actual filesystem unmount.
  */
@@ -1279,13 +1304,9 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	vn_start_write(NULL, &mp, V_WAIT | V_MNTREF);
 	MNT_ILOCK(mp);
 	if ((mp->mnt_kern_flag & MNTK_UNMOUNT) != 0 ||
+	    (mp->mnt_flag & MNT_UPDATE) != 0 ||
 	    !TAILQ_EMPTY(&mp->mnt_uppers)) {
-		MNT_IUNLOCK(mp);
-		if (coveredvp != NULL) {
-			VOP_UNLOCK(coveredvp, 0);
-			vdrop(coveredvp);
-		}
-		vn_finished_write(mp);
+		dounmount_cleanup(mp, coveredvp, 0);
 		return (EBUSY);
 	}
 	mp->mnt_kern_flag |= MNTK_UNMOUNT | MNTK_NOINSMNTQ;
@@ -1294,17 +1315,8 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 		error = vfs_check_usecounts(mp);
 		MNT_ILOCK(mp);
 		if (error != 0) {
-			mp->mnt_kern_flag &= ~(MNTK_UNMOUNT | MNTK_NOINSMNTQ);
-			if (mp->mnt_kern_flag & MNTK_MWAIT) {
-				mp->mnt_kern_flag &= ~MNTK_MWAIT;
-				wakeup(mp);
-			}
-			MNT_IUNLOCK(mp);
-			if (coveredvp != NULL) {
-				VOP_UNLOCK(coveredvp, 0);
-				vdrop(coveredvp);
-			}
-			vn_finished_write(mp);
+			dounmount_cleanup(mp, coveredvp, MNTK_UNMOUNT |
+			    MNTK_NOINSMNTQ);
 			return (error);
 		}
 	}
@@ -1352,7 +1364,7 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	mp->mnt_flag &= ~MNT_ASYNC;
 	mp->mnt_kern_flag &= ~MNTK_ASYNC;
 	MNT_IUNLOCK(mp);
-	cache_purgevfs(mp);	/* remove cache entries for this file sys */
+	cache_purgevfs(mp, false); /* remove cache entries for this file sys */
 	vfs_deallocate_syncvnode(mp);
 	/*
 	 * For forced unmounts, move process cdir/rdir refs on the fs root

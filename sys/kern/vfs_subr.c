@@ -1066,16 +1066,16 @@ vnlru_return_batch_locked(struct mount *mp)
 	if (mp->mnt_tmpfreevnodelistsize == 0)
 		return;
 
-	mtx_lock(&vnode_free_list_mtx);
 	TAILQ_FOREACH(vp, &mp->mnt_tmpfreevnodelist, v_actfreelist) {
 		VNASSERT((vp->v_mflag & VMP_TMPMNTFREELIST) != 0, vp,
 		    ("vnode without VMP_TMPMNTFREELIST on mnt_tmpfreevnodelist"));
 		vp->v_mflag &= ~VMP_TMPMNTFREELIST;
 	}
+	mtx_lock(&vnode_free_list_mtx);
 	TAILQ_CONCAT(&vnode_free_list, &mp->mnt_tmpfreevnodelist, v_actfreelist);
 	freevnodes += mp->mnt_tmpfreevnodelistsize;
-	mp->mnt_tmpfreevnodelistsize = 0;
 	mtx_unlock(&vnode_free_list_mtx);
+	mp->mnt_tmpfreevnodelistsize = 0;
 }
 
 static void
@@ -2641,9 +2641,32 @@ void
 vrefl(struct vnode *vp)
 {
 
+	ASSERT_VI_LOCKED(vp, __func__);
 	CTR2(KTR_VFS, "%s: vp %p", __func__, vp);
 	_vhold(vp, true);
 	v_incr_usecount_locked(vp);
+}
+
+void
+vrefact(struct vnode *vp)
+{
+
+	CTR2(KTR_VFS, "%s: vp %p", __func__, vp);
+	if (__predict_false(vp->v_type == VCHR)) {
+		VNASSERT(vp->v_holdcnt > 0 && vp->v_usecount > 0, vp,
+		    ("%s: wrong ref counts", __func__));
+		vref(vp);
+		return;
+	}
+#ifdef INVARIANTS
+	int old = atomic_fetchadd_int(&vp->v_holdcnt, 1);
+	VNASSERT(old > 0, vp, ("%s: wrong hold count", __func__));
+	old = atomic_fetchadd_int(&vp->v_usecount, 1);
+	VNASSERT(old > 0, vp, ("%s: wrong use count", __func__));
+#else
+	refcount_acquire(&vp->v_holdcnt);
+	refcount_acquire(&vp->v_usecount);
+#endif
 }
 
 /*
@@ -3001,7 +3024,7 @@ vinactive(struct vnode *vp, struct thread *td)
 	obj = vp->v_object;
 	if (obj != NULL && (obj->flags & OBJ_MIGHTBEDIRTY) != 0) {
 		VM_OBJECT_WLOCK(obj);
-		vm_object_page_clean(obj, 0, 0, OBJPC_NOSYNC);
+		vm_object_page_clean(obj, 0, 0, 0);
 		VM_OBJECT_WUNLOCK(obj);
 	}
 	VOP_INACTIVE(vp, td);
@@ -3160,15 +3183,28 @@ vrecycle(struct vnode *vp)
 {
 	int recycled;
 
-	ASSERT_VOP_ELOCKED(vp, "vrecycle");
+	VI_LOCK(vp);
+	recycled = vrecyclel(vp);
+	VI_UNLOCK(vp);
+	return (recycled);
+}
+
+/*
+ * vrecycle, with the vp interlock held.
+ */
+int
+vrecyclel(struct vnode *vp)
+{
+	int recycled;
+
+	ASSERT_VOP_ELOCKED(vp, __func__);
+	ASSERT_VI_LOCKED(vp, __func__);
 	CTR2(KTR_VFS, "%s: vp %p", __func__, vp);
 	recycled = 0;
-	VI_LOCK(vp);
 	if (vp->v_usecount == 0) {
 		recycled = 1;
 		vgonel(vp);
 	}
-	VI_UNLOCK(vp);
 	return (recycled);
 }
 

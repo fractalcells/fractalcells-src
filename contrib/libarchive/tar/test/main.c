@@ -521,7 +521,7 @@ _utf8_to_unicode(uint32_t *pwc, const char *s, size_t n)
 		return (0); /* Standard:  return 0 for end-of-string. */
 	cnt = utf8_count[ch];
 
-	/* Invalide sequence or there are not plenty bytes. */
+	/* Invalid sequence or there are not plenty bytes. */
 	if (n < (size_t)cnt)
 		return (-1);
 
@@ -560,7 +560,7 @@ _utf8_to_unicode(uint32_t *pwc, const char *s, size_t n)
 		return (-1);
 	}
 
-	/* The code point larger than 0x10FFFF is not leagal
+	/* The code point larger than 0x10FFFF is not legal
 	 * Unicode values. */
 	if (wc > 0x10FFFF)
 		return (-1);
@@ -1060,7 +1060,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 	char **expected = NULL;
 	char *p, **actual = NULL;
 	char c;
-	int expected_failure = 0, actual_failure = 0;
+	int expected_failure = 0, actual_failure = 0, retval = 0;
 
 	assertion_count(file, line);
 
@@ -1081,8 +1081,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		if (expected == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
-			free(expected);
-			return (0);
+			goto done;
 		}
 		for (i = 0; lines[i] != NULL; ++i) {
 			expected[i] = strdup(lines[i]);
@@ -1103,8 +1102,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		if (actual == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
-			free(expected);
-			return (0);
+			goto done;
 		}
 		for (j = 0, p = buff; p < buff + buff_size;
 		    p += 1 + strlen(p)) {
@@ -1141,26 +1139,55 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 			++actual_failure;
 	}
 	if (expected_failure == 0 && actual_failure == 0) {
-		free(buff);
-		free(expected);
-		free(actual);
-		return (1);
+		retval = 1;
+		goto done;
 	}
 	failure_start(file, line, "File doesn't match: %s", pathname);
 	for (i = 0; i < expected_count; ++i) {
-		if (expected[i] != NULL) {
+		if (expected[i] != NULL)
 			logprintf("  Expected but not present: %s\n", expected[i]);
-			free(expected[i]);
-		}
 	}
 	for (j = 0; j < actual_count; ++j) {
 		if (actual[j] != NULL)
 			logprintf("  Present but not expected: %s\n", actual[j]);
 	}
 	failure_finish(NULL);
-	free(buff);
-	free(expected);
+done:
 	free(actual);
+	free(buff);
+	for (i = 0; i < expected_count; ++i)
+		free(expected[i]);
+	free(expected);
+
+	return (retval);
+}
+
+/* Verify that a text file does not contains the specified strings */
+int
+assertion_file_contains_no_invalid_strings(const char *file, int line,
+    const char *pathname, const char *strings[])
+{
+	char *buff;
+	int i;
+
+	buff = slurpfile(NULL, "%s", pathname);
+	if (buff == NULL) {
+		failure_start(file, line, "Can't read file: %s", pathname);
+		failure_finish(NULL);
+		return (0);
+	}
+
+	for (i = 0; strings[i] != NULL; ++i) {
+		if (strstr(buff, strings[i]) != NULL) {
+			failure_start(file, line, "Invalid string in %s: %s", pathname,
+			    strings[i]);
+			failure_finish(NULL);
+			free(buff);
+			return(0);
+		}
+	}
+
+	free(buff);
 	return (0);
 }
 
@@ -1301,6 +1328,11 @@ assertion_file_time(const char *file, int line,
 	switch (type) {
 	case 'a': filet_nsec = st.st_atimespec.tv_nsec; break;
 	case 'b': filet = st.st_birthtime;
+		/* FreeBSD filesystems that don't support birthtime
+		 * (e.g., UFS1) always return -1 here. */
+		if (filet == -1) {
+			return (1);
+		}
 		filet_nsec = st.st_birthtimespec.tv_nsec; break;
 	case 'm': filet_nsec = st.st_mtimespec.tv_nsec; break;
 	default: fprintf(stderr, "INTERNAL: Bad type %c for file time", type);
@@ -1378,6 +1410,8 @@ assertion_file_mode(const char *file, int line, const char *pathname, int expect
 	assertion_count(file, line);
 #if defined(_WIN32) && !defined(__CYGWIN__)
 	failure_start(file, line, "assertFileMode not yet implemented for Windows");
+	(void)mode; /* UNUSED */
+	(void)r; /* UNUSED */
 #else
 	{
 		struct stat st;
@@ -1432,7 +1466,7 @@ assertion_file_nlinks(const char *file, int line,
 	assertion_count(file, line);
 	r = lstat(pathname, &st);
 	if (r == 0 && (int)st.st_nlink == nlinks)
-			return (1);
+		return (1);
 	failure_start(file, line, "File %s has %d links, expected %d",
 	    pathname, st.st_nlink, nlinks);
 	failure_finish(NULL);
@@ -1554,7 +1588,7 @@ is_symlink(const char *file, int line,
 	 * really not much point in bothering with this. */
 	return (0);
 #else
-	char buff[300];
+	char buff[301];
 	struct stat st;
 	ssize_t linklen;
 	int r;
@@ -1571,7 +1605,7 @@ is_symlink(const char *file, int line,
 		return (0);
 	if (contents == NULL)
 		return (1);
-	linklen = readlink(pathname, buff, sizeof(buff));
+	linklen = readlink(pathname, buff, sizeof(buff) - 1);
 	if (linklen < 0) {
 		failure_start(file, line, "Can't read symlink %s", pathname);
 		failure_finish(NULL);
@@ -1668,6 +1702,7 @@ assertion_make_file(const char *file, int line,
 	if (0 != chmod(path, mode)) {
 		failure_start(file, line, "Could not chmod %s", path);
 		failure_finish(NULL);
+		close(fd);
 		return (0);
 	}
 	if (contents != NULL) {
@@ -1682,6 +1717,7 @@ assertion_make_file(const char *file, int line,
 			failure_start(file, line,
 			    "Could not write to %s", path);
 			failure_finish(NULL);
+			close(fd);
 			return (0);
 		}
 	}
@@ -2286,7 +2322,7 @@ extract_reference_file(const char *name)
 	for (;;) {
 		if (fgets(buff, sizeof(buff), in) == NULL) {
 			/* TODO: This is a failure. */
-			return;
+			goto done;
 		}
 		if (memcmp(buff, "begin ", 6) == 0)
 			break;
@@ -2327,6 +2363,7 @@ extract_reference_file(const char *name)
 		}
 	}
 	fclose(out);
+done:
 	fclose(in);
 }
 
@@ -2920,8 +2957,8 @@ main(int argc, char **argv)
 		strftime(tmpdir_timestamp, sizeof(tmpdir_timestamp),
 		    "%Y-%m-%dT%H.%M.%S",
 		    localtime(&now));
-		sprintf(tmpdir, "%s/%s.%s-%03d", tmp, progname,
-		    tmpdir_timestamp, i);
+		snprintf(tmpdir, sizeof(tmpdir), "%s/%s.%s-%03d", tmp,
+		    progname, tmpdir_timestamp, i);
 		if (assertMakeDir(tmpdir,0755))
 			break;
 		if (i >= 999) {

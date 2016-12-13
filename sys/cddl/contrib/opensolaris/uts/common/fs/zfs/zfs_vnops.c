@@ -421,17 +421,13 @@ page_busy(vnode_t *vp, int64_t start, int64_t off, int64_t nbytes)
 				vm_page_reference(pp);
 				vm_page_lock(pp);
 				zfs_vmobject_wunlock(obj);
-				vm_page_busy_sleep(pp, "zfsmwb");
+				vm_page_busy_sleep(pp, "zfsmwb", true);
 				zfs_vmobject_wlock(obj);
 				continue;
 			}
 			vm_page_sbusy(pp);
-		} else if (pp == NULL) {
-			pp = vm_page_alloc(obj, OFF_TO_IDX(start),
-			    VM_ALLOC_SYSTEM | VM_ALLOC_IFCACHED |
-			    VM_ALLOC_SBUSY);
-		} else {
-			ASSERT(pp != NULL && !pp->valid);
+		} else if (pp != NULL) {
+			ASSERT(!pp->valid);
 			pp = NULL;
 		}
 
@@ -476,7 +472,7 @@ page_hold(vnode_t *vp, int64_t start)
 				vm_page_reference(pp);
 				vm_page_lock(pp);
 				zfs_vmobject_wunlock(obj);
-				vm_page_busy_sleep(pp, "zfsmwb");
+				vm_page_busy_sleep(pp, "zfsmwb", true);
 				zfs_vmobject_wlock(obj);
 				continue;
 			}
@@ -5934,8 +5930,19 @@ zfs_vptocnp(struct vop_vptocnp_args *ap)
 	}
 
 	if (zp->z_id != parent || zfsvfs->z_parent == zfsvfs) {
+		char name[MAXNAMLEN + 1];
+		znode_t *dzp;
+		size_t len;
+
+		error = zfs_znode_parent_and_name(zp, &dzp, name);
+		if (error == 0) {
+			len = strlen(name);
+			*ap->a_buflen -= len;
+			bcopy(name, ap->a_buf + *ap->a_buflen, len);
+			*ap->a_vpp = ZTOV(dzp);
+		}
 		ZFS_EXIT(zfsvfs);
-		return (vop_stdvptocnp(ap));
+		return (error);
 	}
 	ZFS_EXIT(zfsvfs);
 
@@ -5965,26 +5972,17 @@ zfs_lock(ap)
 		int line;
 	} */ *ap;
 {
-	zfsvfs_t *zfsvfs;
-	znode_t *zp;
 	vnode_t *vp;
-	int flags;
+	znode_t *zp;
 	int err;
 
-	vp = ap->a_vp;
-	flags = ap->a_flags;
-	if ((flags & LK_INTERLOCK) == 0 && (flags & LK_NOWAIT) == 0 &&
-	    (vp->v_iflag & VI_DOOMED) == 0 && (zp = vp->v_data) != NULL &&
-	    (zp->z_pflags & ZFS_XATTR) == 0) {
-		zfsvfs = zp->z_zfsvfs;
-		VERIFY(!RRM_LOCK_HELD(&zfsvfs->z_teardown_lock));
-	}
 	err = vop_stdlock(ap);
-	if ((flags & LK_INTERLOCK) != 0 && (flags & LK_NOWAIT) == 0 &&
-	    (vp->v_iflag & VI_DOOMED) == 0 && (zp = vp->v_data) != NULL &&
-	    (zp->z_pflags & ZFS_XATTR) == 0) {
-		zfsvfs = zp->z_zfsvfs;
-		VERIFY(!RRM_LOCK_HELD(&zfsvfs->z_teardown_lock));
+	if (err == 0 && (ap->a_flags & LK_NOWAIT) == 0) {
+		vp = ap->a_vp;
+		zp = vp->v_data;
+		if (vp->v_mount != NULL && (vp->v_iflag & VI_DOOMED) == 0 &&
+		    zp != NULL && (zp->z_pflags & ZFS_XATTR) == 0)
+			VERIFY(!RRM_LOCK_HELD(&zp->z_zfsvfs->z_teardown_lock));
 	}
 	return (err);
 }

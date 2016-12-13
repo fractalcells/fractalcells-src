@@ -8,6 +8,7 @@ FILES+=	brand-fc.4th
 FILES+=	check-password.4th
 FILES+=	color.4th
 FILES+=	delay.4th
+FILES+=	efi.4th
 FILES+=	frames.4th
 FILES+=	loader.4th
 FILES+=	loader.conf

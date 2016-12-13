@@ -61,14 +61,12 @@ struct cpu_functions {
 	/* CPU functions */
 #if __ARM_ARCH < 6
 	void	(*cf_cpwait)		(void);
-#endif
 
 	/* MMU functions */
 
 	u_int	(*cf_control)		(u_int bic, u_int eor);
 	void	(*cf_setttb)		(u_int ttb);
 
-#if __ARM_ARCH < 6
 	/* TLB functions */
 
 	void	(*cf_tlb_flushID)	(void);
@@ -150,7 +148,9 @@ struct cpu_functions {
 
 	/* Other functions */
 
+#if __ARM_ARCH < 6
 	void	(*cf_drain_writebuf)	(void);
+#endif
 
 	void	(*cf_sleep)		(int mode);
 
@@ -168,10 +168,8 @@ extern u_int cputype;
 
 #if __ARM_ARCH < 6
 #define	cpu_cpwait()		cpufuncs.cf_cpwait()
-#endif
 
 #define cpu_control(c, e)	cpufuncs.cf_control(c, e)
-#if __ARM_ARCH < 6
 #define cpu_setttb(t)		cpufuncs.cf_setttb(t)
 
 #define	cpu_tlb_flushID()	cpufuncs.cf_tlb_flushID()
@@ -190,6 +188,7 @@ extern u_int cputype;
 #define	cpu_idcache_wbinv_all()	cpufuncs.cf_idcache_wbinv_all()
 #define	cpu_idcache_wbinv_range(a, s) cpufuncs.cf_idcache_wbinv_range((a), (s))
 #endif
+
 #define cpu_l2cache_wbinv_all()	cpufuncs.cf_l2cache_wbinv_all()
 #define cpu_l2cache_wb_range(a, s) cpufuncs.cf_l2cache_wb_range((a), (s))
 #define cpu_l2cache_inv_range(a, s) cpufuncs.cf_l2cache_inv_range((a), (s))
@@ -280,14 +279,10 @@ void	armv6_idcache_wbinv_all		(void);
 #endif
 #if defined(CPU_CORTEXA8) || defined(CPU_CORTEXA_MP) || \
     defined(CPU_MV_PJ4B) || defined(CPU_KRAIT)
-void	armv7_setttb			(u_int);
 void	armv7_idcache_wbinv_all		(void);
 void	armv7_cpu_sleep			(int);
 void	armv7_setup			(void);
 void	armv7_drain_writebuf		(void);
-void	armv7_sev			(void);
-
-void	armadaxp_idcache_wbinv_all	(void);
 
 void 	cortexa_setup			(void);
 #endif
@@ -299,7 +294,6 @@ void	pj4bv7_setup			(void);
 #if defined(CPU_ARM1176)
 void	arm11_drain_writebuf	(void);
 
-void    arm11x6_setttb                  (u_int);
 void    arm11x6_setup                   (void);
 void    arm11x6_sleep                   (int);  /* no ref. for errata */
 #endif

@@ -53,7 +53,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/extres/hwreset/hwreset.h>
 #include <dev/extres/phy/phy.h>
 #include <dev/extres/regulator/regulator.h>
-#include <dev/fdt/fdt_common.h>
 #include <dev/ofw/ofw_bus.h>
 #include <dev/ofw/ofw_bus_subr.h>
 #include <dev/ofw/ofw_pci.h>
@@ -710,7 +709,7 @@ tegra_pcib_msi_alloc_msi(device_t dev, device_t child, int count, int maxcount,
 	mtx_lock(&sc->mtx);
 
 	found = false;
-	for (irq = 0; irq < TEGRA_PCIB_MAX_MSI && !found; irq++) {
+	for (irq = 0; (irq + count - 1) < TEGRA_PCIB_MAX_MSI; irq++) {
 		/* Start on an aligned interrupt */
 		if ((irq & (maxcount - 1)) != 0)
 			continue;
@@ -719,20 +718,17 @@ tegra_pcib_msi_alloc_msi(device_t dev, device_t child, int count, int maxcount,
 		found = true;
 
 		/* Check this range is valid */
-		for (end_irq = irq; end_irq != irq + count - 1; end_irq++) {
-			/* No free interrupts */
-			if (end_irq == (TEGRA_PCIB_MAX_MSI - 1)) {
-				found = false;
-				break;
-			}
-
+		for (end_irq = irq; end_irq < irq + count; end_irq++) {
 			/* This is already used */
-			if ((sc->isrcs[irq].flags & TEGRA_FLAG_MSI_USED) ==
+			if ((sc->isrcs[end_irq].flags & TEGRA_FLAG_MSI_USED) ==
 			    TEGRA_FLAG_MSI_USED) {
 				found = false;
 				break;
 			}
 		}
+
+		if (found)
+			break;
 	}
 
 	/* Not enough interrupts were found */
@@ -765,15 +761,15 @@ tegra_pcib_msi_release_msi(device_t dev, device_t child, int count,
 	sc = device_get_softc(dev);
 	mtx_lock(&sc->mtx);
 	for (i = 0; i < count; i++) {
-		ti = (struct tegra_pcib_irqsrc *)isrc;
+		ti = (struct tegra_pcib_irqsrc *)isrc[i];
 
 		KASSERT((ti->flags & TEGRA_FLAG_MSI_USED) == TEGRA_FLAG_MSI_USED,
 		    ("%s: Trying to release an unused MSI-X interrupt",
 		    __func__));
 
 		ti->flags &= ~TEGRA_FLAG_MSI_USED;
-		mtx_unlock(&sc->mtx);
 	}
+	mtx_unlock(&sc->mtx);
 	return (0);
 }
 

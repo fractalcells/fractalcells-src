@@ -72,6 +72,7 @@ exclude EXFAIL common/mib/tst.udp.ksh
 exclude SKIP common/privs/tst.fds.ksh
 exclude SKIP common/privs/tst.func_access.ksh
 exclude SKIP common/privs/tst.getf.ksh
+exclude SKIP common/privs/tst.kpriv.ksh
 exclude SKIP common/privs/tst.op_access.ksh
 exclude SKIP common/privs/tst.procpriv.ksh
 exclude SKIP common/privs/tst.providers.ksh
@@ -126,9 +127,6 @@ exclude EXFAIL common/ip/tst.ipv4remoteicmp.ksh
 # FreeBSD never places tcpcbs in the TIME_WAIT state, so the probe never fires.
 exclude EXFAIL common/ip/tst.localtcpstate.ksh
 exclude EXFAIL common/ip/tst.remotetcpstate.ksh
-
-# Depends on the number of probes in /bin/sh and the current DOF limit.
-exclude EXFAIL common/pid/err.D_PROC_CREATEFAIL.many.d
 
 # Tries to enable pid$target:libc::entry, though there's no "libc" module.
 # Currently unsure as to whether this might be a libproc bug.

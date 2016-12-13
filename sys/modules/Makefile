@@ -41,6 +41,7 @@ SUBDIR=	\
 	${_apm} \
 	${_arcmsr} \
 	${_arcnet} \
+	${_armv8crypto} \
 	${_asmc} \
 	ata \
 	ath \
@@ -56,10 +57,12 @@ SUBDIR=	\
 	${_bios} \
 	${_bktr} \
 	${_bm} \
+	bnxt \
 	bridgestp \
 	bwi \
 	bwn \
 	bwn_pci \
+	${_bytgpio} \
 	cam \
 	${_canbepm} \
 	${_canbus} \
@@ -72,6 +75,7 @@ SUBDIR=	\
 	cd9660_iconv \
 	${_ce} \
 	${_cfi} \
+	${_chromebook_platform} \
 	${_ciss} \
 	cloudabi \
 	${_cloudabi32} \
@@ -316,6 +320,8 @@ SUBDIR=	\
 	re \
 	rl \
 	rtwn \
+	rtwn_pci \
+	rtwn_usb \
 	${_rtwnfw} \
 	${_s3} \
 	${_safe} \
@@ -369,8 +375,6 @@ SUBDIR=	\
 	ufs \
 	uinput \
 	unionfs \
-	urtwn \
-	${_urtwnfw} \
 	usb \
 	utopia \
 	${_vesa} \
@@ -498,7 +502,6 @@ _mwlfw=		mwlfw
 _otusfw=	otusfw
 _ralfw=		ralfw
 _rtwnfw=	rtwnfw
-_urtwnfw=	urtwnfw
 _sf=		sf
 _ti=		ti
 _txp=		txp
@@ -506,7 +509,8 @@ _txp=		txp
 
 .if ${MK_SOURCELESS_UCODE} != "no" && ${MACHINE_CPUARCH} != "arm" && \
 	${MACHINE_CPUARCH} != "mips" && \
-	${MACHINE_ARCH} != "powerpc" && ${MACHINE_CPUARCH} != "riscv"
+	${MACHINE_ARCH} != "powerpc" && ${MACHINE_ARCH} != "powerpcspe" && \
+	${MACHINE_CPUARCH} != "riscv"
 _cxgbe=		cxgbe
 .endif
 
@@ -532,6 +536,7 @@ _cxgb=		cxgb
 .endif
 
 .if ${MACHINE_CPUARCH} == "aarch64"
+_armv8crypto=	armv8crypto
 _em=		em
 _igb=		igb
 .endif
@@ -539,6 +544,7 @@ _igb=		igb
 .if ${MACHINE_CPUARCH} == "i386" || ${MACHINE_CPUARCH} == "amd64"
 _agp=		agp
 _an=		an
+_bios=		bios
 _bktr=		bktr
 _bxe=		bxe
 _cardbus=	cardbus
@@ -597,7 +603,9 @@ _amdsbwd=	amdsbwd
 _amdtemp=	amdtemp
 _arcmsr=	arcmsr
 _asmc=		asmc
+_bytgpio=	bytgpio
 _ciss=		ciss
+_chromebook_platform=	chromebook_platform
 _cmx=		cmx
 _coretemp=	coretemp
 .if ${MK_SOURCELESS_HOST} != "no"
@@ -713,7 +721,6 @@ _stg=		stg
 .if ${MK_EISA} != "no"
 _ahb=		ahb
 .endif
-_bios=		bios
 _cm=		cm
 .if ${MK_SOURCELESS_UCODE} != "no"
 _ctau=		ctau
@@ -744,13 +751,16 @@ _cfi=		cfi
 _cpufreq=	cpufreq
 _drm=		drm
 _exca=		exca
-_nvram=		powermac_nvram
 _pccard=	pccard
 _wi=		wi
 .endif
 
 .if ${MACHINE_ARCH} == "powerpc64"
 _drm2=		drm2
+.endif
+.if ${MACHINE_ARCH} == "powerpc64" || ${MACHINE_ARCH} == "powerpc"
+# Don't build powermac_nvram for powerpcspe, it's never supported.
+_nvram=		powermac_nvram
 .endif
 
 .if ${MACHINE_CPUARCH} == "sparc64"

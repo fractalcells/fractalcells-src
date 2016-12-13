@@ -432,6 +432,21 @@ int t4_wr_mbox_meat_timeout(struct adapter *adap, int mbox, const void *cmd,
 	CH_ERR(adap, "command %#x in mailbox %d timed out\n",
 	       *(const u8 *)cmd, mbox);
 
+	/* If DUMP_MBOX is set the mbox has already been dumped */
+	if ((adap->debug_flags & DF_DUMP_MBOX) == 0) {
+		p = cmd;
+		CH_ERR(adap, "mbox: %016llx %016llx %016llx %016llx "
+		    "%016llx %016llx %016llx %016llx\n",
+		    (unsigned long long)be64_to_cpu(p[0]),
+		    (unsigned long long)be64_to_cpu(p[1]),
+		    (unsigned long long)be64_to_cpu(p[2]),
+		    (unsigned long long)be64_to_cpu(p[3]),
+		    (unsigned long long)be64_to_cpu(p[4]),
+		    (unsigned long long)be64_to_cpu(p[5]),
+		    (unsigned long long)be64_to_cpu(p[6]),
+		    (unsigned long long)be64_to_cpu(p[7]));
+	}
+
 	t4_report_fw_error(adap);
 	t4_fatal_err(adap);
 	return ret;
@@ -4739,7 +4754,7 @@ int t4_config_glbl_rss(struct adapter *adapter, int mbox, unsigned int mode,
 		c.u.manual.mode_pkd =
 			cpu_to_be32(V_FW_RSS_GLB_CONFIG_CMD_MODE(mode));
 	} else if (mode == FW_RSS_GLB_CONFIG_CMD_MODE_BASICVIRTUAL) {
-		c.u.basicvirtual.mode_pkd =
+		c.u.basicvirtual.mode_keymode =
 			cpu_to_be32(V_FW_RSS_GLB_CONFIG_CMD_MODE(mode));
 		c.u.basicvirtual.synmapen_to_hashtoeplitz = cpu_to_be32(flags);
 	} else
@@ -4754,11 +4769,14 @@ int t4_config_glbl_rss(struct adapter *adapter, int mbox, unsigned int mode,
  *	@viid: the VI id
  *	@flags: RSS flags
  *	@defq: id of the default RSS queue for the VI.
+ *	@skeyidx: RSS secret key table index for non-global mode
+ *	@skey: RSS vf_scramble key for VI.
  *
  *	Configures VI-specific RSS properties.
  */
 int t4_config_vi_rss(struct adapter *adapter, int mbox, unsigned int viid,
-		     unsigned int flags, unsigned int defq)
+		     unsigned int flags, unsigned int defq, unsigned int skeyidx,
+		     unsigned int skey)
 {
 	struct fw_rss_vi_config_cmd c;
 
@@ -4769,6 +4787,10 @@ int t4_config_vi_rss(struct adapter *adapter, int mbox, unsigned int viid,
 	c.retval_len16 = cpu_to_be32(FW_LEN16(c));
 	c.u.basicvirtual.defaultq_to_udpen = cpu_to_be32(flags |
 					V_FW_RSS_VI_CONFIG_CMD_DEFAULTQ(defq));
+	c.u.basicvirtual.secretkeyidx_pkd = cpu_to_be32(
+					V_FW_RSS_VI_CONFIG_CMD_SECRETKEYIDX(skeyidx));
+	c.u.basicvirtual.secretkeyxor = cpu_to_be32(skey);
+
 	return t4_wr_mbox(adapter, mbox, &c, sizeof(c), NULL);
 }
 
@@ -4887,11 +4909,11 @@ void t4_write_rss_key(struct adapter *adap, u32 *key, int idx)
 	if (idx >= 0 && idx < rss_key_addr_cnt) {
 		if (rss_key_addr_cnt > 16)
 			t4_write_reg(adap, A_TP_RSS_CONFIG_VRT,
-				     V_KEYWRADDRX(idx >> 4) |
+				     vrt | V_KEYWRADDRX(idx >> 4) |
 				     V_T6_VFWRADDR(idx) | F_KEYWREN);
 		else
 			t4_write_reg(adap, A_TP_RSS_CONFIG_VRT,
-				     V_KEYWRADDR(idx) | F_KEYWREN);
+				     vrt| V_KEYWRADDR(idx) | F_KEYWREN);
 	}
 }
 
@@ -5781,6 +5803,7 @@ const char *t4_get_port_type_description(enum fw_port_type port_type)
 		"CR_QSFP",
 		"CR2_QSFP",
 		"SFP28",
+		"KR_SFP28",
 	};
 
 	if (port_type < ARRAY_SIZE(port_type_description))
@@ -5855,10 +5878,13 @@ void t4_get_port_stats(struct adapter *adap, int idx, struct port_stats *p)
 	p->tx_ppp6		= GET_STAT(TX_PORT_PPP6);
 	p->tx_ppp7		= GET_STAT(TX_PORT_PPP7);
 
-	if (stat_ctl & F_COUNTPAUSESTATTX) {
-		p->tx_frames -= p->tx_pause;
-		p->tx_octets -= p->tx_pause * 64;
-		p->tx_mcast_frames -= p->tx_pause;
+	if (chip_id(adap) >= CHELSIO_T5) {
+		if (stat_ctl & F_COUNTPAUSESTATTX) {
+			p->tx_frames -= p->tx_pause;
+			p->tx_octets -= p->tx_pause * 64;
+		}
+		if (stat_ctl & F_COUNTPAUSEMCTX)
+			p->tx_mcast_frames -= p->tx_pause;
 	}
 
 	p->rx_pause		= GET_STAT(RX_PORT_PAUSE);
@@ -5889,10 +5915,13 @@ void t4_get_port_stats(struct adapter *adap, int idx, struct port_stats *p)
 	p->rx_ppp6		= GET_STAT(RX_PORT_PPP6);
 	p->rx_ppp7		= GET_STAT(RX_PORT_PPP7);
 
-	if (stat_ctl & F_COUNTPAUSESTATRX) {
-		p->rx_frames -= p->rx_pause;
-		p->rx_octets -= p->rx_pause * 64;
-		p->rx_mcast_frames -= p->rx_pause;
+	if (chip_id(adap) >= CHELSIO_T5) {
+		if (stat_ctl & F_COUNTPAUSESTATRX) {
+			p->rx_frames -= p->rx_pause;
+			p->rx_octets -= p->rx_pause * 64;
+		}
+		if (stat_ctl & F_COUNTPAUSEMCRX)
+			p->rx_mcast_frames -= p->rx_pause;
 	}
 
 	p->rx_ovflow0 = (bgmap & 1) ? GET_STAT_COM(RX_BG_0_MAC_DROP_FRAME) : 0;

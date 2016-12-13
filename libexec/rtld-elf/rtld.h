@@ -148,8 +148,6 @@ typedef struct Struct_Obj_Entry {
     /* These items are computed by map_object() or by digest_phdr(). */
     caddr_t mapbase;		/* Base address of mapped region */
     size_t mapsize;		/* Size of mapped region in bytes */
-    caddr_t gapbase;		/* Base address of random gap */
-    size_t gapsize;		/* Size of random gap in bytes */
     size_t textsize;		/* Size of text segment in bytes */
     Elf_Addr vaddrbase;		/* Base address in shared object file */
     caddr_t relocbase;		/* Relocation constant = mapbase - vaddrbase */
@@ -369,6 +367,7 @@ void dump_Elf_Rela(Obj_Entry *, const Elf_Rela *, u_long);
 unsigned long elf_hash(const char *);
 const Elf_Sym *find_symdef(unsigned long, const Obj_Entry *,
   const Obj_Entry **, int, SymCache *, struct Struct_RtldLockState *);
+void ifunc_init(Elf_Auxinfo[__min_size(AT_COUNT)]);
 void init_pltgot(Obj_Entry *);
 void lockdflt_init(void);
 void digest_notes(Obj_Entry *, Elf_Addr, Elf_Addr);
