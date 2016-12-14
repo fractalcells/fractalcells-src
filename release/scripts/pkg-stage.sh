@@ -11,7 +11,8 @@ export PERMISSIVE="YES"
 export REPO_AUTOUPDATE="NO"
 export PKGCMD="/usr/sbin/pkg -d"
 
-_DVD_PACKAGES="databases/phppgadmin
+_DVD_PACKAGES="databases/influxdb
+databases/phppgadmin
 databases/postgresql94-client
 databases/postgresql94-contrib
 databases/postgresql94-server
@@ -26,6 +27,7 @@ mail/opensmtpd
 net/rsync
 net/openldap24-client
 net/openldap24-server
+net-mgmt/collectd5
 net-mgmt/zabbix24-agent
 net-mgmt/zabbix24-frontend
 net-mgmt/zabbix24-server
@@ -38,16 +40,18 @@ security/py-fail2ban
 security/sudo
 shells/zsh
 sysutils/ansible
-sysutils/fractalcells
 sysutils/tmux
 sysutils/zxfer
 sysutils/iocage-devel
 www/gitlab
 www/redmine
-www/nginx"
+www/nginx
+www/grafana3
+hardenedbsd/secadm-kmod
+hardenedbsd/secadm"
 
 # If NOPORTS is set for the release, do not attempt to build pkg(8).
-if [ ! ! -f ${PORTSDIR}/Makefile ]; then
+if [ ! -f ${PORTSDIR}/Makefile ]; then
 	echo "*** ${PORTSDIR} is missing!    ***"
 	echo "*** Skipping pkg-stage.sh     ***"
 	echo "*** Unset NOPORTS to fix this ***"
