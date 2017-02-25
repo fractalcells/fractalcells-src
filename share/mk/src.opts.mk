@@ -156,7 +156,6 @@ __DEFAULT_YES_OPTIONS = \
     SENDMAIL \
     SETUID_LOGIN \
     SHAREDOCS \
-    SHARED_TOOLCHAIN \
     SHLIBRANDOM \
     SOURCELESS \
     SOURCELESS_HOST \
@@ -187,7 +186,6 @@ __DEFAULT_NO_OPTIONS = \
     CLANG_EXTRAS \
     DEVD_PIE \
     DTRACE_TESTS \
-    EISA \
     FREEBSD_UPDATE \
     HESIOD \
     LIB32 \
@@ -196,7 +194,7 @@ __DEFAULT_NO_OPTIONS = \
     OFED \
     OPENLDAP \
     PORTSNAP \
-    RCS \
+    REPRODUCIBLE_BUILD \
     SHARED_TOOLCHAIN \
     SORT_THREADS \
     SVN \
@@ -258,9 +256,9 @@ __DEFAULT_YES_OPTIONS+=LLVM_LIBUNWIND
 __DEFAULT_NO_OPTIONS+=LLVM_LIBUNWIND
 .endif
 .if ${__T} == "aarch64"
-__DEFAULT_YES_OPTIONS+=LLD_AS_LD
+__DEFAULT_YES_OPTIONS+=LLD_IS_LD
 .else
-__DEFAULT_NO_OPTIONS+=LLD_AS_LD
+__DEFAULT_NO_OPTIONS+=LLD_IS_LD
 .endif
 .if ${__T} == "aarch64" || ${__T} == "amd64"
 __DEFAULT_YES_OPTIONS+=LLD LLDB
@@ -286,6 +284,12 @@ BROKEN_OPTIONS+=EFI
 __DEFAULT_YES_OPTIONS+=PIE
 .else
 __DEFAULT_NO_OPTIONS+=PIE
+.endif
+
+.if ${__T} == "armv6"
+__DEFAULT_NO_OPTIONS+=SHARED_TOOLCHAIN
+.else
+__DEFAULT_YES_OPTIONS+=SHARED_TOOLCHAIN
 .endif
 
 .if ${__T} == "amd64"
@@ -420,6 +424,21 @@ MK_CLANG_FULL:= no
 .endif
 
 #
+# MK_* options whose default value depends on another option.
+#
+.for vv in \
+    GSSAPI/KERBEROS \
+    MAN_UTILS/MAN
+.if defined(WITH_${vv:H})
+MK_${vv:H}:=	yes
+.elif defined(WITHOUT_${vv:H})
+MK_${vv:H}:=	no
+.else
+MK_${vv:H}:=	${MK_${vv:T}}
+.endif
+.endfor
+
+#
 # Set defaults for the MK_*_SUPPORT variables.
 #
 
@@ -443,21 +462,6 @@ MK_CLANG_FULL:= no
 MK_${var}_SUPPORT:= no
 .else
 MK_${var}_SUPPORT:= yes
-.endif
-.endfor
-
-#
-# MK_* options whose default value depends on another option.
-#
-.for vv in \
-    GSSAPI/KERBEROS \
-    MAN_UTILS/MAN
-.if defined(WITH_${vv:H})
-MK_${vv:H}:=	yes
-.elif defined(WITHOUT_${vv:H})
-MK_${vv:H}:=	no
-.else
-MK_${vv:H}:=	${MK_${vv:T}}
 .endif
 .endfor
 

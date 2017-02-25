@@ -1,0 +1,148 @@
++ export 'DEBUG_SELF_INITIALIZE='
++ export 'DEBUG_INITIALIZE_FILE='
++ BSDCFG_SHARE=/usr/share/bsdconfig
++ . /usr/share/bsdconfig/common.subr
++ [ ! '' ]
++ _COMMON_SUBR=1
++ : 3
++ : 4
++ pgm=bsdinstall
++ ARGC=0
++ ARGV=''
++ SUCCESS=0
++ FAILURE=1
++ uname -s
++ export 'UNAME_S=FreeBSD'
++ uname -p
++ export 'UNAME_P=amd64'
++ uname -m
++ export 'UNAME_M=amd64'
++ uname -r
++ export 'UNAME_R=12.0-CURRENT'
++ :
++ :
++ GETOPTS_STDARGS=dD:
++ GETOPTS_ALLFLAGS=abcdefghijklmnopqrstuvwxyz
++ GETOPTS_ALLFLAGS=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
++ GETOPTS_ALLFLAGS=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
++ :
++ f_have setvar
++ f_quietly type setvar
++ type setvar
++ f_usage_awk=$'
+BEGIN { found = 0 }
+{
+\tif ( !found && $0 ~ /^[[:space:]]*($|#)/ ) next
+\tfound = 1
+\tprint
+}
+'
++ f_index_file_awk=$'
+# Variables that should be defined on the invocation line:
+# \t-v keyword="keyword"
+BEGIN { found = 0 }
+( $0 ~ "^menu_selection=\\"" keyword "\\\\|" ) {
+\tprint FILENAME
+\tfound++
+\texit
+}
+END { exit ! found }
+'
++ f_index_menusel_keyword_awk=$'
+# Variables that should be defined on the invocation line:
+# \t-v pgm="program_name"
+#
+BEGIN {
+\tprefix = "menu_selection=\\""
+\tplen = length(prefix)
+\tfound = 0
+}
+{
+\tif (!match($0, "^" prefix ".*\\\\|.*\\"")) next
+
+\tkeyword = command = substr($0, plen + 1, RLENGTH - plen - 1)
+\tsub(/^.*\\|/, "", command)
+\tsub(/\\|.*$/, "", keyword)
+
+\tif ( command == pgm )
+\t{
+\t\tprint keyword
+\t\tfound++
+\t\texit
+\t}
+}
+END { exit ! found }
+'
++ f_index_menusel_command_awk=$'
+# Variables that should be defined on the invocation line:
+# \t-v key="keyword"
+#
+BEGIN {
+\tprefix = "menu_selection=\\""
+\tplen = length(prefix)
+\tfound = 0
+}
+{
+\tif (!match($0, "^" prefix ".*\\\\|.*\\"")) next
+
+\tkeyword = command = substr($0, plen + 1, RLENGTH - plen - 1)
+\tsub(/^.*\\|/, "", command)
+\tsub(/\\|.*$/, "", keyword)
+
+\tif ( keyword == key )
+\t{
+\t\tprint command
+\t\tfound++
+\t\texit
+\t}
+}
+END { exit ! found }
+'
++ trap f_interrupt INT
++ trap f_die TERM PIPE XCPU XFSZ FPE TRAP ABRT SEGV
++ trap '' ALRM PROF USR1 USR2 HUP VTALRM
++ eval exec '3>&1'
++ exec
++ eval exec '4>&2'
++ exec
++ f_dprintf '%s: DEBUG_SELF_INITIALIZE=[%s]' dialog.subr ''
++ [ '' ]
++ return 0
++ : do nothing
++ f_dprintf 'UNAME_S=[%s] UNAME_P=[%s] UNAME_R=[%s]' FreeBSD amd64 12.0-CURRENT
++ [ '' ]
++ return 0
++ f_dprintf '%s: Successfully loaded.' common.subr
++ [ '' ]
++ return 0
++ : /tmp/bsdinstall_etc
++ export BSDINSTALL_TMPETC
++ : /tmp/bsdinstall_boot
++ export BSDINSTALL_TMPBOOT
++ : /tmp/bsdinstall_etc/fstab
++ export PATH_FSTAB
++ : /usr/freebsd-dist
++ export BSDINSTALL_DISTDIR
++ : /mnt
++ export BSDINSTALL_CHROOT
++ export 'debugFile=/tmp/bsdinstall_log'
++ getopts dD: ignored
++ shift 0
++ VERB=auto
++ shift
++ [ -d /tmp/bsdinstall_etc ]
++ [ -d /tmp/bsdinstall_boot ]
++ f_quietly f_debug_init
++ f_debug_init
++ f_isset debugFile
++ eval [ '"${debugFile+set}"' ]
++ [ set ]
++ f_dprintf 'Running installation step: %s %s' auto ''
++ [ 1 ]
++ local 'fmt=Running installation step: %s %s'
++ shift
++ [ /tmp/bsdinstall_log ]
++ printf 'DEBUG: Running installation step: %s %s\n' auto ''
++ return 0
++ [ 1 ]
++ exec /usr/libexec/bsdinstall/auto
