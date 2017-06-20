@@ -10,6 +10,7 @@ export PKG_DBDIR="/tmp/pkg"
 export PERMISSIVE="YES"
 export REPO_AUTOUPDATE="NO"
 export PKGCMD="/usr/sbin/pkg -d"
+export PORTSDIR="${PORTSDIR:-/usr/ports}"
 
 _DVD_PACKAGES="databases/influxdb
 databases/phppgadmin

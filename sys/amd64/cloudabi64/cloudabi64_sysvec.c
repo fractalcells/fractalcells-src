@@ -90,9 +90,13 @@ cloudabi64_proc_setregs(struct thread *td, struct image_params *imgp,
 }
 
 static int
-cloudabi64_fetch_syscall_args(struct thread *td, struct syscall_args *sa)
+cloudabi64_fetch_syscall_args(struct thread *td)
 {
-	struct trapframe *frame = td->td_frame;
+	struct trapframe *frame;
+	struct syscall_args *sa;
+
+	frame = td->td_frame;
+	sa = &td->td_sa;
 
 	/* Obtain system call number. */
 	sa->code = frame->tf_rax;
@@ -216,6 +220,5 @@ Elf64_Brandinfo cloudabi64_brand = {
 	.brand		= ELFOSABI_CLOUDABI,
 	.machine	= EM_X86_64,
 	.sysvec		= &cloudabi64_elf_sysvec,
-	.flags		= BI_CAN_EXEC_DYN,
-	.compat_3_brand	= "CloudABI",
+	.flags		= BI_CAN_EXEC_DYN | BI_BRAND_ONLY_STATIC,
 };

@@ -303,7 +303,9 @@ struct l_statfs {
 	l_long		f_ffree;
 	l_fsid_t	f_fsid;
 	l_long		f_namelen;
-	l_long		f_spare[6];
+	l_long		f_frsize;
+	l_long		f_flags;
+	l_long		f_spare[4];
 };
 
 #define	LINUX_CODA_SUPER_MAGIC	0x73757245L
@@ -316,6 +318,7 @@ struct l_statfs {
 #define	LINUX_NTFS_SUPER_MAGIC	0x5346544EL
 #define	LINUX_PROC_SUPER_MAGIC	0x9fa0L
 #define	LINUX_UFS_SUPER_MAGIC	0x00011954L	/* XXX - UFS_MAGIC in Linux */
+#define	LINUX_ZFS_SUPER_MAGIC	0x2FC12FC1
 #define LINUX_DEVFS_SUPER_MAGIC	0x1373L
 #define	LINUX_SHMFS_MAGIC	0x01021994
 
@@ -325,6 +328,7 @@ bsd_to_linux_ftype(const char *fstypename)
 	int i;
 	static struct {const char *bsd_name; long linux_type;} b2l_tbl[] = {
 		{"ufs",     LINUX_UFS_SUPER_MAGIC},
+		{"zfs",     LINUX_ZFS_SUPER_MAGIC},
 		{"cd9660",  LINUX_ISOFS_SUPER_MAGIC},
 		{"nfs",     LINUX_NFS_SUPER_MAGIC},
 		{"ext2fs",  LINUX_EXT2_SUPER_MAGIC},
@@ -371,6 +375,9 @@ bsd_to_linux_statfs(struct statfs *bsd_statfs, struct l_statfs *linux_statfs)
 	linux_statfs->f_fsid.val[0] = bsd_statfs->f_fsid.val[0];
 	linux_statfs->f_fsid.val[1] = bsd_statfs->f_fsid.val[1];
 	linux_statfs->f_namelen = MAXNAMLEN;
+	linux_statfs->f_frsize = bsd_statfs->f_bsize;
+	linux_statfs->f_flags = 0;
+	memset(linux_statfs->f_spare, 0, sizeof(linux_statfs->f_spare));
 
 	return (0);
 }
@@ -415,6 +422,9 @@ bsd_to_linux_statfs64(struct statfs *bsd_statfs, struct l_statfs64 *linux_statfs
 	linux_statfs->f_fsid.val[0] = bsd_statfs->f_fsid.val[0];
 	linux_statfs->f_fsid.val[1] = bsd_statfs->f_fsid.val[1];
 	linux_statfs->f_namelen = MAXNAMLEN;
+	linux_statfs->f_frsize = bsd_statfs->f_bsize;
+	linux_statfs->f_flags = 0;
+	memset(linux_statfs->f_spare, 0, sizeof(linux_statfs->f_spare));
 }
 
 int

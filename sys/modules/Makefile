@@ -1,6 +1,6 @@
 # $FreeBSD$
 
-SYSDIR?=${.CURDIR}/..
+SYSDIR?=${SRCTOP}/sys
 .include "${SYSDIR}/conf/kern.opts.mk"
 
 SUBDIR_PARALLEL=
@@ -33,6 +33,7 @@ SUBDIR=	\
 	alc \
 	ale \
 	alq \
+	${_amd_ecc_inject} \
 	${_amdsbwd} \
 	${_amdtemp} \
 	amr \
@@ -44,6 +45,15 @@ SUBDIR=	\
 	${_asmc} \
 	ata \
 	ath \
+	ath_dfs \
+	ath_hal \
+	ath_hal_ar5210 \
+	ath_hal_ar5211 \
+	ath_hal_ar5212 \
+	ath_hal_ar5416 \
+	ath_hal_ar9300 \
+	ath_main \
+	ath_rate \
 	ath_pci \
 	${_autofs} \
 	${_auxio} \
@@ -71,6 +81,7 @@ SUBDIR=	\
 	cd9660_iconv \
 	${_ce} \
 	${_cfi} \
+	chacha20 \
 	${_chromebook_platform} \
 	${_ciss} \
 	cloudabi \
@@ -103,7 +114,7 @@ SUBDIR=	\
 	${_efirt} \
 	${_elink} \
 	${_em} \
-	en \
+	${_ena} \
 	${_ep} \
 	${_epic} \
 	esp \
@@ -112,10 +123,10 @@ SUBDIR=	\
 	${_ex} \
 	${_exca} \
 	ext2fs \
-	${_fatm} \
 	fdc \
 	fdescfs \
 	${_fe} \
+	${_ffec} \
 	filemon \
 	firewire \
 	firmware \
@@ -126,7 +137,6 @@ SUBDIR=	\
 	${_glxiic} \
 	${_glxsb} \
 	gpio \
-	hatm \
 	hifn \
 	hme \
 	${_hpt27xx} \
@@ -169,6 +179,7 @@ SUBDIR=	\
 	ipfw_nat \
 	${_ipfw_nat64} \
 	${_ipfw_nptv6} \
+	${_ipfw_pmod} \
 	${_ipmi} \
 	ip6_mroute_mod \
 	ip_mroute_mod \
@@ -283,7 +294,6 @@ SUBDIR=	\
 	ow \
 	${_padlock} \
 	${_padlock_rng} \
-	patm \
 	${_pccard} \
 	${_pcfclock} \
 	pcn \
@@ -305,6 +315,7 @@ SUBDIR=	\
 	${_qlxge} \
 	${_qlxgb} \
 	${_qlxgbe} \
+	${_qlnx} \
 	ral \
 	${_ralfw} \
 	${_random_fortuna} \
@@ -342,6 +353,7 @@ SUBDIR=	\
 	snp \
 	sound \
 	${_speaker} \
+	spigen \
 	${_splash} \
 	${_sppp} \
 	ste \
@@ -350,11 +362,8 @@ SUBDIR=	\
 	${_sym} \
 	${_syscons} \
 	sysvipc \
+	tcp \
 	${_ti} \
-	${_tcp_fastpath} \
-	${_tcpmd5} \
-	tests/framework \
-	tests/callout_test \
 	tl \
 	tmpfs \
 	${_toecore} \
@@ -373,7 +382,6 @@ SUBDIR=	\
 	uinput \
 	unionfs \
 	usb \
-	utopia \
 	${_vesa} \
 	${_virtio} \
 	vge \
@@ -419,7 +427,7 @@ SUBDIR+=	opensolaris
 .endif
 
 .if ${MK_CRYPT} != "no" || defined(ALL_MODULES)
-.if exists(${.CURDIR}/../opencrypto)
+.if exists(${SRCTOP}/sys/opencrypto)
 _crypto=	crypto
 _cryptodev=	cryptodev
 _random_fortuna=random_fortuna
@@ -432,10 +440,6 @@ _random_other=	random_other
 SUBDIR+=	cuse
 .endif
 
-.if ${MK_EXTRA_TCP_STACKS} != "no" || defined(ALL_MODULES)
-_tcp_fastpath=	tcp/fastpath
-.endif
-
 .if (${MK_INET_SUPPORT} != "no" || ${MK_INET6_SUPPORT} != "no") || \
 	defined(ALL_MODULES)
 _carp=		carp
@@ -443,9 +447,9 @@ _toecore=	toecore
 _if_enc=	if_enc
 _if_gif=	if_gif
 _if_gre=	if_gre
+_ipfw_pmod=	ipfw_pmod
 .if ${MK_IPSEC_SUPPORT} != "no"
 _ipsec=		ipsec
-_tcpmd5=	tcp/tcpmd5
 .endif
 .endif
 
@@ -472,6 +476,7 @@ _ipfilter=	ipfilter
 .endif
 
 .if ${MK_ISCSI} != "no" || defined(ALL_MODULES)
+SUBDIR+=	cfiscsi
 SUBDIR+=	iscsi
 SUBDIR+=	iscsi_initiator
 .endif
@@ -496,7 +501,6 @@ _pfsync=	pfsync
 
 .if ${MK_SOURCELESS_UCODE} != "no"
 _bce=		bce
-_fatm=		fatm
 _fxp=		fxp
 _ispfw=		ispfw
 _sf=		sf
@@ -516,6 +520,10 @@ _rtwnfw=	rtwnfw
 	${MACHINE_ARCH} != "powerpc" && ${MACHINE_ARCH} != "powerpcspe" && \
 	${MACHINE_CPUARCH} != "riscv"
 _cxgbe=		cxgbe
+.endif
+
+.if ${MK_TESTS} != "no" || defined(ALL_MODULES)
+SUBDIR+=	tests
 .endif
 
 .if ${MK_ZFS} != "no" || defined(ALL_MODULES)
@@ -565,6 +573,7 @@ _drm=		drm
 _drm2=		drm2
 _ed=		ed
 _em=		em
+_ena=		ena
 _ep=		ep
 _et=		et
 _exca=		exca
@@ -606,6 +615,7 @@ _acpi=		acpi
 .if ${MK_CRYPT} != "no" || defined(ALL_MODULES)
 _aesni=		aesni
 .endif
+_amd_ecc_inject=amd_ecc_inject
 _amdsbwd=	amdsbwd
 _amdtemp=	amdtemp
 _arcmsr=	arcmsr
@@ -693,6 +703,7 @@ _pms=		pms
 _qlxge=		qlxge
 _qlxgb=		qlxgb
 _qlxgbe=	qlxgbe
+_qlnx=		qlnx
 _sfxge=		sfxge
 
 .if ${MK_BHYVE} != "no" || defined(ALL_MODULES)
@@ -748,6 +759,7 @@ _cfi=		cfi
 _cpufreq=	cpufreq
 _drm=		drm
 _exca=		exca
+_ffec=		ffec
 _pccard=	pccard
 _wi=		wi
 .endif
@@ -774,6 +786,10 @@ _cloudabi32=	cloudabi32
 _cloudabi64=	cloudabi64
 .endif
 
+.endif
+
+.if ${MACHINE_ARCH} == "armv6"
+_ffec=		ffec
 .endif
 
 SUBDIR+=${MODULES_EXTRA}

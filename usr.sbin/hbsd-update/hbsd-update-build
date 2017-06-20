@@ -1,6 +1,6 @@
 #!/bin/sh
 #-
-# Copyright (c) 2015,2016 HardenedBSD
+# Copyright (c) 2015,2017 HardenedBSD
 # Author: Shawn Webb <shawn.webb@hardenedbsd.org>
 #
 # This work originally sponsored by G2, Inc
@@ -49,6 +49,7 @@ setup_environment() {
 	PUBKEY="/usr/share/keys/updater/certs/updater.crt"
 	SIGNBIN="/usr/bin/openssl"
 	KERNELS="HARDENEDBSD"
+	KERNCONFIGFILE="" #only needed for custom kernel configs
 	SRCDIR="/usr/src"
 	STAGEDIR="/builds/updater/stage"
 	OUTPUTDIR="/builds/updater/output"
@@ -65,6 +66,8 @@ setup_environment() {
 	VERBOSE=0
 	TARGET=$(uname -m)
 	TARGET_ARCH=$(uname -p)
+	NEED_CROSS_UTILS=1
+	SCRIPTFILE=""
 }
 
 cleanup_chroot() {
@@ -159,17 +162,36 @@ build_source() {
 
 	for kernel in $(echo ${KERNELS}); do
 		debug_print "[*] Building kernel ${kernel}"
-		chroot ${CHROOTDIR} make \
-			-C /usr/src \
-			KERNCONF=${kernel} \
-			-sj$(sysctl -n hw.ncpu) \
-			$(echo ${DEVMODE} | \
-				sed 's/yes/-DNO_KERNELCLEAN/') \
-			buildkernel
-
-		res=${?}
-		if [ ${res} -gt 0 ]; then
-			return ${res}
+		if [ ! -z "${KERNCONFIGFILE}" ]; then
+		       	if [ -f "${KERNCONFIGFILE}" ]; then
+				cp -f ${KERNCONFIGFILE} ${CHROOTDIR}/usr/src/sys/$(uname -m)/conf
+				chroot ${CHROOTDIR} make \
+					-C /usr/src \
+					KERNCONF=${kernel} \
+					-sj$(sysctl -n hw.ncpu) \
+					$(echo ${DEVMODE} | \
+						sed 's/yes/-DNO_KERNELCLEAN/') \
+					buildkernel
+				res=${?}
+				if [ ${res} -gt 0 ]; then
+					return ${res}
+				fi
+			else
+				debug_print "[-] Could not find kernel config file ${KERNCONFIGFILE}"
+				return 1
+			fi
+		else
+			chroot ${CHROOTDIR} make \
+				-C /usr/src \
+				KERNCONF=${kernel} \
+				-sj$(sysctl -n hw.ncpu) \
+				$(echo ${DEVMODE} | \
+					sed 's/yes/-DNO_KERNELCLEAN/') \
+				buildkernel
+			res=${?}
+			if [ ${res} -gt 0 ]; then
+				return ${res}
+			fi
 		fi
 	done
 
@@ -189,6 +211,12 @@ create_src_conf() {
 
 install_binutils() {
 	local res
+
+	if [ ${NEED_CROSS_UTILS} -eq 0 ]; then
+		debug_print "[*] Cross-build detected, but configured not to need binutils."
+		export CROSS_BINUTILS_PREFIX="/usr"
+		return 0
+	fi
 
 	debug_print "[*] Cross-build detected. Installing ${TARGET_ARCH}-binutils."
 
@@ -302,15 +330,11 @@ build_obsolete() {
 	chroot ${CHROOTDIR} make -C /usr/src \
 		-f Makefile.inc1 \
 		-V OLD_FILES -V OLD_LIBS \
-		TARGET=$(uname -m) \
-		TARGET_ARCH=$(uname -m) \
 		check-old > ${STAGEDIR}/ObsoleteFiles.txt
 
 	chroot ${CHROOTDIR} make -C /usr/src \
 		-f Makefile.inc1 \
 		-V OLD_DIRS \
-		TARGET=$(uname -m) \
-		TARGET_ARCH=$(uname -m) \
 		check-old > ${STAGEDIR}/ObsoleteDirs.txt
 }
 
@@ -333,6 +357,14 @@ EOF
 
 	cp ${CHROOTDIR}/usr/src/UPDATING ${STAGEDIR}/
 	cp ${CHROOTDIR}/usr/src/UPDATING-HardenedBSD ${STAGEDIR}/
+
+	if [ ${#SCRIPTFILE} -gt 0 ]; then
+		cp ${SCRIPTFILE} ${STAGEDIR}/script.sh
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			return ${res}
+		fi
+	fi
 
 	if [ ${BUILDSRCSET} -gt 0 ]; then
 		build_src_tarball
@@ -462,6 +494,9 @@ sign_artifacts() {
 	debug_print "[*] Signing artifacts"
 
 	files="skip.txt ObsoleteFiles.txt ObsoleteDirs.txt"
+	if [ ${#SCRIPTFILE} -gt 0 ]; then
+		files="${files} script.sh"
+	fi
 
 	if [ -z "${PRIVKEY}" ]; then
 		return 0

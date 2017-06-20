@@ -1,3 +1,33 @@
+[20170616] Changed __HardenedBSD_version scheme
+__HardenedBSD_version = 1200050
+
+       The version numbers may differ in different branches (10-STABLE,
+       11-STABLE, 12-CURRENT) and to keep the version number in pair
+       with the features state, there is a need to allow to bump they
+       differently.
+
+
+[20170616] Changed default protection settings for text section
+__HardenedBSD_version = 50 
+
+       Fixes the (theoretically) last outstanding memory
+       protection related weakness in HBSD's user-space detectable
+       with paxtest.
+
+
+[20170302] Enable CFI by default for amd64
+__HardenedBSD_version = 49
+
+	Enable WITH_CFI by default on HardenedBSD/amd64.
+	Control-Flow Integrity (CFI) is an exploit mitigation
+	technique developed in the clang/llvm project. Now that
+	base has clang 4.0.0, which brings a linker that supports
+	Link-Time Optimization (LTO), lld, we can now make use of
+	CFI, which requires LTO.
+
+	This also enables lld by default for amd64 and arm64. Disable
+	CFI by setting WITHOUT_CFI in src.conf(5).
+
 [20170112] Enable SafeStack by default for amd64
 __HardenedBSD_version = 48
 

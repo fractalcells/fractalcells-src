@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -152,29 +152,11 @@ sys_sctp_peeloff(td, uap)
 	td->td_retval[0] = fd;
 
 	CURVNET_SET(head->so_vnet);
-	so = sonewconn(head, SS_ISCONNECTED);
+	so = sopeeloff(head);
 	if (so == NULL) {
 		error = ENOMEM;
 		goto noconnection;
 	}
-	/*
-	 * Before changing the flags on the socket, we have to bump the
-	 * reference count.  Otherwise, if the protocol calls sofree(),
-	 * the socket will be released due to a zero refcount.
-	 */
-        SOCK_LOCK(so);
-        soref(so);                      /* file descriptor reference */
-        SOCK_UNLOCK(so);
-
-	ACCEPT_LOCK();
-
-	TAILQ_REMOVE(&head->so_comp, so, so_list);
-	head->so_qlen--;
-	so->so_state |= (head->so_state & SS_NBIO);
-	so->so_state &= ~SS_NOFDREF;
-	so->so_qstate &= ~SQ_COMP;
-	so->so_head = NULL;
-	ACCEPT_UNLOCK();
 	finit(nfp, fflag, DTYPE_SOCKET, so, &socketops);
 	error = sctp_do_peeloff(head, so, (sctp_assoc_t)uap->name);
 	if (error != 0)

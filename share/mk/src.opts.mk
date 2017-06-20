@@ -41,7 +41,7 @@ __<src.opts.mk>__:
 # that haven't been converted over.
 #
 
-# These options are used by src the builds
+# These options are used by the src builds
 
 __DEFAULT_YES_OPTIONS = \
     ACCT \
@@ -63,6 +63,7 @@ __DEFAULT_YES_OPTIONS = \
     BOOTPARAMD \
     BOOTPD \
     BSD_CPIO \
+    BSD_GREP_FASTMATCH \
     BSDINSTALL \
     BSNMP \
     BZIP2 \
@@ -71,6 +72,7 @@ __DEFAULT_YES_OPTIONS = \
     CASPER \
     CCD \
     CDDL \
+    CLANG_EXTRAS \
     CPP \
     CROSS_COMPILER \
     CRYPT \
@@ -97,13 +99,9 @@ __DEFAULT_YES_OPTIONS = \
     GAMES \
     GCOV \
     GDB \
-    GNU \
     GNU_DIFF \
     GNU_GREP \
-    GNU_GREP_COMPAT \
     GPIO \
-    GPL_DTC \
-    GROFF \
     HAST \
     HBSD_UPDATE \
     HTML \
@@ -132,7 +130,6 @@ __DEFAULT_YES_OPTIONS = \
     MAIL \
     MAILWRAPPER \
     MAKE \
-    MANDOCDB \
     NDIS \
     NETCAT \
     NETGRAPH \
@@ -183,10 +180,11 @@ __DEFAULT_YES_OPTIONS = \
 
 __DEFAULT_NO_OPTIONS = \
     BSD_GREP \
-    CLANG_EXTRAS \
     DEVD_PIE \
     DTRACE_TESTS \
     FREEBSD_UPDATE \
+    GNU_GREP_COMPAT \
+    GPL_DTC \
     HESIOD \
     LIB32 \
     LIBSOFT \
@@ -195,6 +193,7 @@ __DEFAULT_NO_OPTIONS = \
     OPENLDAP \
     PORTSNAP \
     REPRODUCIBLE_BUILD \
+    RPCBIND_WARMSTART_SUPPORT \
     SHARED_TOOLCHAIN \
     SORT_THREADS \
     SVN \
@@ -228,17 +227,18 @@ __TT=${MACHINE}
 .if ${COMPILER_FEATURES:Mc++11} && (${__T} == "aarch64" || \
     ${__T} == "amd64" || ${__TT} == "arm" || ${__T} == "i386")
 # Clang is enabled, and will be installed as the default /usr/bin/cc.
-__DEFAULT_YES_OPTIONS+=CLANG CLANG_BOOTSTRAP CLANG_FULL CLANG_IS_CC
+__DEFAULT_YES_OPTIONS+=CLANG CLANG_BOOTSTRAP CLANG_FULL CLANG_IS_CC LLD
 __DEFAULT_NO_OPTIONS+=GCC GCC_BOOTSTRAP GNUCXX
-.elif ${COMPILER_FEATURES:Mc++11} && ${__T:Mpowerpc*}
-# On powerpc, if an external compiler that supports C++11 is used as ${CC},
-# then Clang is enabled, but GCC is installed as the default /usr/bin/cc.
+.elif ${COMPILER_FEATURES:Mc++11} && ${__T} != "riscv64" && ${__T} != "sparc64"
+# If an external compiler that supports C++11 is used as ${CC} and Clang
+# supports the target, then Clang is enabled but GCC is installed as the
+# default /usr/bin/cc.
 __DEFAULT_YES_OPTIONS+=CLANG CLANG_FULL GCC GCC_BOOTSTRAP GNUCXX
-__DEFAULT_NO_OPTIONS+=CLANG_BOOTSTRAP CLANG_IS_CC
+__DEFAULT_NO_OPTIONS+=CLANG_BOOTSTRAP CLANG_IS_CC LLD
 .else
 # Everything else disables Clang, and uses GCC instead.
 __DEFAULT_YES_OPTIONS+=GCC GCC_BOOTSTRAP GNUCXX
-__DEFAULT_NO_OPTIONS+=CLANG CLANG_BOOTSTRAP CLANG_FULL CLANG_IS_CC
+__DEFAULT_NO_OPTIONS+=CLANG CLANG_BOOTSTRAP CLANG_FULL CLANG_IS_CC LLD
 .endif
 # In-tree binutils/gcc are older versions without modern architecture support.
 .if ${__T} == "aarch64" || ${__T:Mriscv*} != ""
@@ -255,19 +255,27 @@ __DEFAULT_YES_OPTIONS+=LLVM_LIBUNWIND
 .else
 __DEFAULT_NO_OPTIONS+=LLVM_LIBUNWIND
 .endif
-.if ${__T} == "aarch64"
-__DEFAULT_YES_OPTIONS+=LLD_IS_LD
+.if ${__T} == "aarch64" || ${__T} == "amd64"
+__DEFAULT_YES_OPTIONS+=LLD_BOOTSTRAP LLD_IS_LD
 .else
-__DEFAULT_NO_OPTIONS+=LLD_IS_LD
+__DEFAULT_NO_OPTIONS+=LLD_BOOTSTRAP LLD_IS_LD
 .endif
 .if ${__T} == "aarch64" || ${__T} == "amd64"
-__DEFAULT_YES_OPTIONS+=LLD LLDB
+__DEFAULT_YES_OPTIONS+=LLDB
 .else
-__DEFAULT_NO_OPTIONS+=LLD LLDB
+__DEFAULT_NO_OPTIONS+=LLDB
 .endif
 # LLVM lacks support for FreeBSD 64-bit atomic operations for ARMv4/ARMv5
 .if ${__T} == "arm" || ${__T} == "armeb"
 BROKEN_OPTIONS+=LLDB
+.endif
+# GDB in base is generally less functional than GDB in ports.  Ports GDB
+# does not yet contain kernel support for arm, and sparc64 kernel support
+# has not been tested.
+.if ${__T:Marm*} != "" || ${__T} == "sparc64"
+__DEFAULT_NO_OPTIONS+=GDB_LIBEXEC
+.else
+__DEFAULT_YES_OPTIONS+=GDB_LIBEXEC
 .endif
 # Only doing soft float API stuff on armv6
 .if ${__T} != "armv6"
@@ -294,8 +302,17 @@ __DEFAULT_YES_OPTIONS+=SHARED_TOOLCHAIN
 
 .if ${__T} == "amd64"
 __DEFAULT_YES_OPTIONS+=SAFESTACK
+__DEFAULT_YES_OPTIONS+=CFI
 .else
 __DEFAULT_NO_OPTIONS+=SAFESTACK
+__DEFAULT_NO_OPTIONS+=CFI
+.endif
+
+.if ${__T} == "aarch64" || ${__T} == "amd64" || ${__T} == "i386" || \
+    ${__T} == "powerpc64" || ${__T} == "sparc64"
+__DEFAULT_YES_OPTIONS+=CXGBETOOL
+.else
+__DEFAULT_NO_OPTIONS+=CXGBETOOL
 .endif
 
 .include <bsd.mkopt.mk>
@@ -365,7 +382,6 @@ MK_KERBEROS:=	no
 
 .if ${MK_CXX} == "no"
 MK_CLANG:=	no
-MK_GROFF:=	no
 MK_GNUCXX:=	no
 MK_TESTS:=	no
 .endif
@@ -398,10 +414,6 @@ MK_AUTHPF:=	no
 MK_DTRACE_TESTS:= no
 .endif
 
-.if ${MK_TEXTPROC} == "no"
-MK_GROFF:=	no
-.endif
-
 .if ${MK_CROSS_COMPILER} == "no"
 MK_BINUTILS_BOOTSTRAP:= no
 MK_CLANG_BOOTSTRAP:= no
@@ -415,12 +427,18 @@ MK_CLANG:=	no
 MK_GCC:=	no
 MK_GDB:=	no
 MK_INCLUDES:=	no
+MK_LLD:=	no
 MK_LLDB:=	no
 .endif
 
 .if ${MK_CLANG} == "no"
 MK_CLANG_EXTRAS:= no
 MK_CLANG_FULL:= no
+MK_SAFESTACK:=	no
+.endif
+
+.if ${MK_LLD_IS_LD} == "no" || ${MK_LLD_BOOTSTRAP} == "no"
+MK_CFI:=	no
 .endif
 
 #
@@ -449,7 +467,6 @@ MK_${vv:H}:=	${MK_${vv:T}}
 .for var in \
     BLACKLIST \
     BZIP2 \
-    GNU \
     INET \
     INET6 \
     KERBEROS \

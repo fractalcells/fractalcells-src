@@ -35,7 +35,7 @@ KERN_DEBUGDIR?=	${DEBUGDIR}
 .MAIN: all
 
 .for target in all clean cleandepend cleandir clobber depend install \
-    obj reinstall tags
+    ${_obj} reinstall tags
 ${target}: kernel-${target}
 .if !defined(MODULES_WITH_WORLD) && !defined(NO_MODULES) && exists($S/modules)
 ${target}: modules-${target}
@@ -79,7 +79,7 @@ PORTSMODULESENV=\
 all:
 .for __i in ${PORTS_MODULES}
 	@${ECHO} "===> Ports module ${__i} (all)"
-	cd $${PORTSDIR:-/usr/ports}/${__i}; ${PORTSMODULESENV} ${MAKE} -B clean all
+	cd $${PORTSDIR:-/usr/ports}/${__i}; ${PORTSMODULESENV} ${MAKE} -B clean build
 .endfor
 
 .for __target in install reinstall clean

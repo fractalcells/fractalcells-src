@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -111,7 +111,15 @@ typedef	__uintptr_t	uintptr_t;
  */
 #define	SOCK_CLOEXEC	0x10000000
 #define	SOCK_NONBLOCK	0x20000000
-#endif
+#ifdef _KERNEL
+/*
+ * Flags for accept1(), kern_accept4() and solisten_dequeue, in addition
+ * to SOCK_CLOEXEC and SOCK_NONBLOCK.
+ */
+#define ACCEPT4_INHERIT 0x1
+#define ACCEPT4_COMPAT  0x2
+#endif	/* _KERNEL */
+#endif	/* __BSD_VISIBLE */
 
 /*
  * Option flags per-socket.
@@ -704,9 +712,5 @@ void so_sowwakeup(struct socket *so);
 void so_lock(struct socket *so);
 void so_unlock(struct socket *so);
 
-void so_listeners_apply_all(struct socket *so, void (*func)(struct socket *, void *), void *arg);
-
-#endif
-
-
+#endif /* _KERNEL */
 #endif /* !_SYS_SOCKET_H_ */

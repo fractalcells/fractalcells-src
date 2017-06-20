@@ -8,11 +8,17 @@
     bin
         cat
         ..
+        chmod
+        ..
         date
         ..
         dd
         ..
+        echo
+        ..
         expr
+        ..
+        ln
         ..
         ls
         ..
@@ -21,6 +27,8 @@
         pax
         ..
         pkill
+        ..
+        pwait
         ..
         sh
             builtins
@@ -308,6 +316,8 @@
             ttyio
             ..
         ..
+        libcam
+        ..
         libcasper
             services
                 cap_dns
@@ -324,6 +334,8 @@
         ..
         libdevdctl
         ..
+        libkvm
+        ..
         libmp
         ..
         libnv
@@ -331,6 +343,8 @@
         libproc
         ..
         librt
+        ..
+        libsbuf
         ..
         libthr
             dlopen
@@ -421,10 +435,6 @@
                 uzip
                     etalon
                     ..
-                ..
-            ..
-            eli
-                pbkdf2
                 ..
             ..
         ..
@@ -602,23 +612,35 @@
         ..
         cmp
         ..
+        compress
+        ..
         cpio
         ..
         col
         ..
         comm
         ..
+        csplit
+        ..
         cut
+        ..
+        diff
         ..
         dirname
         ..
+        du
+        ..
         file2c
+        ..
+        getconf
         ..
         grep
         ..
         gzip
         ..
         ident
+        ..
+        indent
         ..
         join
         ..
@@ -636,7 +658,11 @@
         ..
         opensm
         ..
+        pr
+        ..
         printf
+        ..
+        procstat
         ..
         sdiff
         ..
@@ -645,6 +671,8 @@
             ..
         ..
         soelim
+        ..
+        stat
         ..
         tail
         ..

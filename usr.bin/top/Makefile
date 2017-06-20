@@ -1,6 +1,6 @@
 # $FreeBSD$
 
-TOPDIR=	${.CURDIR}/../../contrib/top
+TOPDIR=	${SRCTOP}/contrib/top
 .PATH: ${TOPDIR}
 
 PROG=	top
@@ -9,6 +9,8 @@ SRCS=	commands.c display.c machine.c screen.c top.c \
 SRCS+=	sigdesc.h top.local.h
 CFLAGS+= -DHAVE_GETOPT -DHAVE_STRERROR -DORDER
 CFLAGS+= -I${.CURDIR} -I${TOPDIR} -I.
+
+CFI_OVERRIDE=-fno-sanitize=cfi-icall
 
 WARNS?=	0
 
@@ -24,7 +26,7 @@ CFLAGS+= -D"Table_size=${TOP_TABLE_SIZE}"
 LIBADD=	ncursesw m kvm jail
 
 CLEANFILES= sigdesc.h
-SIGCONV_AWK= ${.CURDIR}/../../contrib/top/sigconv.awk
+SIGCONV_AWK= ${SRCTOP}/contrib/top/sigconv.awk
 STAGED_INCLUDE_DIR?= ${DESTDIR}/usr/include
 SIGNAL_H= ${STAGED_INCLUDE_DIR}/sys/signal.h
 sigdesc.h: ${SIGCONV_AWK} ${SIGNAL_H}

@@ -1,6 +1,6 @@
 #!/bin/sh
 #-
-# Copyright (c) 2015,2016 HardenedBSD
+# Copyright (c) 2015,2017 HardenedBSD
 # Author: Shawn Webb <shawn.webb@hardenedbsd.org>
 #
 # This work originally sponsored by G2, Inc
@@ -45,9 +45,11 @@ ignorever=0
 unsigned=0
 verbose=0
 integriforce=1
+no_kernel=0
 no_obsolete=0
 interactive=0
 install_src=0
+keeptmp=0
 
 update_hash=""
 
@@ -160,7 +162,7 @@ dnssec_check() {
 
 			if ! echo ${val} | grep -qF 'has TXT record'; then
 				debug_print "[-] Could not get DNS record."
-				return 1
+				return 2
 			fi
 
 			if echo ${val} | grep -qF 'failed'; then
@@ -375,8 +377,12 @@ check_set_validity() {
 	local signedhash
 	local computedhash
 
-	checkfiles="base.txz kernel-${kernel}.txz etcupdate.tbz skip.txt"
-	extrafiles="ObsoleteFiles.txt ObsoleteDirs.txt"
+	checkfiles="base.txz etcupdate.tbz skip.txt"
+	extrafiles="ObsoleteFiles.txt ObsoleteDirs.txt script.sh"
+
+	if [ ${no_kernel} -eq 0 ]; then
+		checkfiles="${checkfiles} kernel-${kernel}.txz"
+	fi
 
 	if [ ${integriforce} -gt 0 ]; then
 		if [ -f ${tmpdir}/secadm.integriforce.rules ]; then
@@ -420,7 +426,9 @@ check_set_validity() {
 
 	for file in ${extrafiles}; do
 		if [ ! -f ${tmpdir}/${file} ]; then
-			echo "[-] Could not find extra file ${file}. Skipping validity checks."
+			if [ "$file"} != "script.sh" ]; then
+				debug_print "[-] Warning: Could not find extra file ${file}.  Skipping validity checks for that file."
+			fi
 			continue
 		fi
 
@@ -777,7 +785,11 @@ destroy_be() {
 }
 
 cleanup() {
-	rm -rf ${tmpdir}
+	if [ ${keeptmp} -eq 0 ]; then
+		rm -rf ${tmpdir}
+	else
+		debug_print "[*] Temp directory kept at: ${tmpdir}"
+	fi
 }
 
 check_sanity() {
@@ -805,8 +817,7 @@ check_sanity() {
 }
 
 report_version() {
-	local ver
-	ver=$(get_version)
+	get_version > /dev/null 2>&1
 	if [ ! ${?} -eq 0 ]; then
 		echo "[-] Could not get remote version number" >&2
 		exit 1
@@ -816,9 +827,23 @@ report_version() {
 		echo "[+] Local version: $(cat ${mountpoint}/var/db/hbsd-update/version)"
 	fi
 
-	echo "[+] Remote version: ${ver}"
+	echo -n "[+] Remote version: ${buildver}"
+	
+	if [ ! -z "${update_hash}" ]; then
+		echo -n " $(echo ${update_hash} | sed 's,:, ,')"
+	fi
+
+	echo
 
 	exit 0
+}
+
+pre_install_hook() {
+	return 0
+}
+
+post_install_hook() {
+	return 0
 }
 
 main() {
@@ -827,8 +852,9 @@ main() {
 
 	do_report_version=0
 	local_kernel=""
+	no_kernel=0
 
-	while getopts 'dhiosCIUVb:c:j:K:k:t:u:v:' opt; do
+	while getopts 'dhinosCITUVb:c:j:K:k:t:u:v:' opt; do
 		case "${opt}" in
 			b)
 				if ! which -s ${BEADM}; then
@@ -862,6 +888,9 @@ main() {
 			k)
 				local_kernel="${OPTARG}"
 				;;
+			n)
+				no_kernel=1
+				;;
 			o)
 				no_obsolete=1
 				;;
@@ -870,6 +899,9 @@ main() {
 				;;
 			t)
 				tmpdir="${OPTARG}"
+				;;
+			T)
+				keeptmp=1
 				;;
 			U)
 				unsigned=1
@@ -955,6 +987,17 @@ main() {
 		fi
 	fi
 
+	if [ -f ${tmpdir}/script.sh ]; then
+		. ${tmpdir}/script.sh
+	fi
+
+	pre_install_hook
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		exit 1
+	fi
+
 	create_be
 	res=${?}
 	if [ ${res} -gt 0 ]; then
@@ -973,12 +1016,14 @@ main() {
 		exit 1
 	fi
 
-	apply_kernel
-	res=${?}
-	if [ ${res} -gt 0 ]; then
-		cleanup
-		destroy_be
-		exit 1
+	if [ ${no_kernel} -eq 0 ]; then
+		apply_kernel
+		res=${?}
+		if [ ${res} -gt 0 ]; then
+			cleanup
+			destroy_be
+			exit 1
+		fi
 	fi
 
 	if [ ${no_obsolete} -eq 0 ]; then
@@ -1002,6 +1047,14 @@ main() {
 	fi
 
 	cache_version
+	res=${?}
+	if [ ${res} -gt 0 ]; then
+		cleanup
+		destroy_be
+		exit 1
+	fi
+
+	post_install_hook
 	res=${?}
 	if [ ${res} -gt 0 ]; then
 		cleanup

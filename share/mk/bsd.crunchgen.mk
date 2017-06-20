@@ -110,7 +110,7 @@ CRUNCHGEN?= crunchgen
 CRUNCHENV+= MK_TESTS=no \
 	    UPDATE_DEPENDFILE=no \
 	    _RECURSING_CRUNCH=1
-CRUNCHENV+= MK_SAFESTACK=no
+CRUNCHENV+= MK_SAFESTACK=no MK_CFI=no
 .ORDER: ${OUTPUTS} objs
 ${OUTPUTS:[1]}: .META
 ${OUTPUTS:[2..-1]}: .NOMETA
@@ -134,7 +134,7 @@ ${PROG}: ${OUTPUTS} objs .NOMETA .PHONY
 
 objs: ${OUTMK} .META
 	${CRUNCHENV} MAKEOBJDIRPREFIX=${CRUNCHOBJS} \
-	    ${MAKE} -f ${OUTMK} BUILD_TOOLS_META=.NOMETA_CMP objs
+	    ${MAKE} -f ${OUTMK} BUILD_TOOLS_META=.NOMETA objs
 
 # <sigh> Someone should replace the bin/csh and bin/sh build-tools with
 # shell scripts so we can remove this nonsense.

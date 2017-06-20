@@ -41,7 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -217,7 +217,7 @@ in6_delayed_cksum(struct mbuf *m, uint32_t plen, u_short offset)
 
 int
 ip6_fragment(struct ifnet *ifp, struct mbuf *m0, int hlen, u_char nextproto,
-    int mtu, uint32_t id)
+    int fraglen , uint32_t id)
 {
 	struct mbuf *m, **mnext, *m_frgpart;
 	struct ip6_hdr *ip6, *mhip6;
@@ -226,11 +226,13 @@ ip6_fragment(struct ifnet *ifp, struct mbuf *m0, int hlen, u_char nextproto,
 	int error;
 	int tlen = m0->m_pkthdr.len;
 
+	KASSERT((fraglen % 8 == 0), ("Fragment length must be a multiple of 8"));
+
 	m = m0;
 	ip6 = mtod(m, struct ip6_hdr *);
 	mnext = &m->m_nextpkt;
 
-	for (off = hlen; off < tlen; off += mtu) {
+	for (off = hlen; off < tlen; off += fraglen) {
 		m = m_gethdr(M_NOWAIT, MT_DATA);
 		if (!m) {
 			IP6STAT_INC(ip6s_odropped);
@@ -249,18 +251,18 @@ ip6_fragment(struct ifnet *ifp, struct mbuf *m0, int hlen, u_char nextproto,
 			return (error);
 		}
 		ip6f->ip6f_offlg = htons((u_short)((off - hlen) & ~7));
-		if (off + mtu >= tlen)
-			mtu = tlen - off;
+		if (off + fraglen >= tlen)
+			fraglen = tlen - off;
 		else
 			ip6f->ip6f_offlg |= IP6F_MORE_FRAG;
-		mhip6->ip6_plen = htons((u_short)(mtu + hlen +
+		mhip6->ip6_plen = htons((u_short)(fraglen + hlen +
 		    sizeof(*ip6f) - sizeof(struct ip6_hdr)));
-		if ((m_frgpart = m_copym(m0, off, mtu, M_NOWAIT)) == NULL) {
+		if ((m_frgpart = m_copym(m0, off, fraglen, M_NOWAIT)) == NULL) {
 			IP6STAT_INC(ip6s_odropped);
 			return (ENOBUFS);
 		}
 		m_cat(m, m_frgpart);
-		m->m_pkthdr.len = mtu + hlen + sizeof(*ip6f);
+		m->m_pkthdr.len = fraglen + hlen + sizeof(*ip6f);
 		m->m_pkthdr.fibnum = m0->m_pkthdr.fibnum;
 		m->m_pkthdr.rcvif = NULL;
 		ip6f->ip6f_reserved = 0;
@@ -323,6 +325,7 @@ ip6_output(struct mbuf *m0, struct ip6_pktopts *opt,
 	uint32_t id;
 
 	if (inp != NULL) {
+		INP_LOCK_ASSERT(inp);
 		M_SETFIB(m, inp->inp_inc.inc_fibnum);
 		if ((flags & IP_NODEFAULTFLOWID) == 0) {
 			/* unconditionally set flowid */
@@ -494,8 +497,7 @@ ip6_output(struct mbuf *m0, struct ip6_pktopts *opt,
 	if (ro == NULL) {
 		ro = &ip6route;
 		bzero((caddr_t)ro, sizeof(*ro));
-	} else
-		ro->ro_flags |= RT_LLE_CACHE;
+	}
 	ro_pmtu = ro;
 	if (opt && opt->ip6po_rthdr)
 		ro = &opt->ip6po_route;
@@ -1545,6 +1547,7 @@ ip6_ctloutput(struct socket *so, struct sockopt *sopt)
 #endif
 			case IPV6_V6ONLY:
 			case IPV6_AUTOFLOWLABEL:
+			case IPV6_ORIGDSTADDR:
 			case IPV6_BINDANY:
 			case IPV6_BINDMULTI:
 #ifdef	RSS
@@ -1730,6 +1733,9 @@ do { \
 					OPTSET(IN6P_AUTOFLOWLABEL);
 					break;
 
+				case IPV6_ORIGDSTADDR:
+					OPTSET2(INP_ORIGDSTADDR, optval);
+					break;
 				case IPV6_BINDANY:
 					OPTSET(INP_BINDANY);
 					break;
@@ -2016,6 +2022,10 @@ do { \
 
 				case IPV6_AUTOFLOWLABEL:
 					optval = OPTBIT(IN6P_AUTOFLOWLABEL);
+					break;
+
+				case IPV6_ORIGDSTADDR:
+					optval = OPTBIT2(INP_ORIGDSTADDR);
 					break;
 
 				case IPV6_BINDANY:
@@ -2455,7 +2465,7 @@ do {\
 	if (src->type) {\
 		int hlen = (((struct ip6_ext *)src->type)->ip6e_len + 1) << 3;\
 		dst->type = malloc(hlen, M_IP6OPT, canwait);\
-		if (dst->type == NULL && canwait == M_NOWAIT)\
+		if (dst->type == NULL)\
 			goto bad;\
 		bcopy(src->type, dst->type, hlen);\
 	}\

@@ -295,7 +295,8 @@ _sx_xlock(struct sx *sx, int opts, const char *file, int line)
 	uintptr_t tid, x;
 	int error = 0;
 
-	KASSERT(kdb_active != 0 || !TD_IS_IDLETHREAD(curthread),
+	KASSERT(kdb_active != 0 || SCHEDULER_STOPPED() ||
+	    !TD_IS_IDLETHREAD(curthread),
 	    ("sx_xlock() by idle thread %p on sx %s @ %s:%d",
 	    curthread, sx->lock_object.lo_name, file, line));
 	KASSERT(sx->sx_lock != SX_LOCK_DESTROYED,
@@ -332,7 +333,7 @@ sx_try_xlock_(struct sx *sx, const char *file, int line)
 	if (SCHEDULER_STOPPED_TD(td))
 		return (1);
 
-	KASSERT(kdb_active != 0 || !TD_IS_IDLETHREAD(curthread),
+	KASSERT(kdb_active != 0 || !TD_IS_IDLETHREAD(td),
 	    ("sx_try_xlock() by idle thread %p on sx %s @ %s:%d",
 	    curthread, sx->lock_object.lo_name, file, line));
 	KASSERT(sx->sx_lock != SX_LOCK_DESTROYED,
@@ -410,7 +411,7 @@ sx_try_upgrade_(struct sx *sx, const char *file, int line)
 	 * we will wake up the exclusive waiters when we drop the lock.
 	 */
 	x = sx->sx_lock & SX_LOCK_EXCLUSIVE_WAITERS;
-	success = atomic_cmpset_ptr(&sx->sx_lock, SX_SHARERS_LOCK(1) | x,
+	success = atomic_cmpset_acq_ptr(&sx->sx_lock, SX_SHARERS_LOCK(1) | x,
 	    (uintptr_t)curthread | x);
 	LOCK_LOG_TRY("XUPGRADE", &sx->lock_object, 0, success, file, line);
 	if (success) {
@@ -1030,7 +1031,8 @@ _sx_slock(struct sx *sx, int opts, const char *file, int line)
 	uintptr_t x;
 	int error;
 
-	KASSERT(kdb_active != 0 || !TD_IS_IDLETHREAD(curthread),
+	KASSERT(kdb_active != 0 || SCHEDULER_STOPPED() ||
+	    !TD_IS_IDLETHREAD(curthread),
 	    ("sx_slock() by idle thread %p on sx %s @ %s:%d",
 	    curthread, sx->lock_object.lo_name, file, line));
 	KASSERT(sx->sx_lock != SX_LOCK_DESTROYED,

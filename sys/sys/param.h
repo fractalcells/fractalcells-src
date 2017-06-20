@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -58,7 +58,7 @@
  *		in the range 5 to 9.
  */
 #undef __FreeBSD_version
-#define __FreeBSD_version 1200022	/* Master, propagated to newvers */
+#define __FreeBSD_version 1200034	/* Master, propagated to newvers */
 
 /*
  * __FreeBSD_kernel__ indicates that this system uses the kernel of FreeBSD,
@@ -244,9 +244,7 @@
  *		Filesystems can of course request smaller chunks.  Actual
  *		backing memory uses a chunk size of a page (PAGE_SIZE).
  *		The default value here can be overridden on a per-architecture
- *		basis by defining it in <machine/param.h>.  This should
- *		probably be done to increase its value, when MAXBCACHEBUF is
- *		defined as a larger value in <machine/param.h>.
+ *		basis by defining it in <machine/param.h>.
  *
  *		If you make BKVASIZE too small you risk seriously fragmenting
  *		the buffer KVM map which may slow things down a bit.  If you

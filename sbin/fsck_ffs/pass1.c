@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -133,9 +133,14 @@ pass1(void)
 		 */
 		if ((preen || inoopt) && usedsoftdep && !rebuildcg) {
 			cp = &cg_inosused(cgp)[(inosused - 1) / CHAR_BIT];
-			for ( ; inosused > 0; inosused -= CHAR_BIT, cp--) {
-				if (*cp == 0)
+			for ( ; inosused != 0; cp--) {
+				if (*cp == 0) {
+					if (inosused > CHAR_BIT)
+						inosused -= CHAR_BIT;
+					else
+						inosused = 0;
 					continue;
+				}
 				for (i = 1 << (CHAR_BIT - 1); i > 0; i >>= 1) {
 					if (*cp & i)
 						break;
@@ -143,8 +148,6 @@ pass1(void)
 				}
 				break;
 			}
-			if (inosused < 0)
-				inosused = 0;
 		}
 		/*
 		 * Allocate inoinfo structures for the allocated inodes.
