@@ -1,9 +1,6 @@
 /*-
- * Copyright (c) 2014 The FreeBSD Foundation
+ * Copyright (c) 2017 Ian Lepore <ian@freebsd.org>
  * All rights reserved.
- *
- * This software was developed by Andrew Turner under
- * sponsorship from the FreeBSD Foundation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,33 +22,15 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * $FreeBSD$
  */
 
-#include <machine/asm.h>
-__FBSDID("$FreeBSD$");
+#ifndef	_ARM_ARM_NEXUSVAR_H_
+#define	_ARM_ARM_NEXUSVAR_H_
 
-#include <machine/setjmp.h>
+/* Set a platform busdma tag to be inherited by all busses and devices. */
+void nexus_set_dma_tag(bus_dma_tag_t _tag);
 
-ENTRY(sigsetjmp)
-	cmp	x1, #0
-	b.eq	1f
-	b	_C_LABEL(setjmp)
-1:
-	b	_C_LABEL(_setjmp)
-END(sigsetjmp)
+#endif
 
-ENTRY(siglongjmp)
-	/* Load the _setjmp magic */
-	ldr	x2, .Lmagic
-	ldr	x3, [x0]
-
-	/* Check the magic */
-	cmp	x2, x3
-	b.eq	1f
-	b	_C_LABEL(longjmp)
-1:
-	b	_C_LABEL(_longjmp)
-	.align	3
-.Lmagic:
-	.quad	_JB_MAGIC__SETJMP
-END(siglongjmp)
