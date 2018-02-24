@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-4-Clause
+ *
  * Copyright (C) 1995-1997 Wolfgang Solfrank.
  * Copyright (C) 1995-1997 TooLs GmbH.
  * All rights reserved.
@@ -109,6 +111,11 @@ get_cyclecount(void)
 
 extern char btext[];
 extern char etext[];
+
+#ifdef __powerpc64__
+extern void enter_idle_powerx(void);
+extern uint64_t can_wakeup;
+#endif
 
 void	cpu_halt(void);
 void	cpu_reset(void);

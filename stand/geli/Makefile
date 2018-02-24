@@ -1,28 +1,11 @@
 # $FreeBSD$
 # libgeliboot
 
-MAN=
+DO32=1
 
 .include <bsd.init.mk>
-MK_SSP=		no
 
 LIB=		geliboot
-INTERNALLIB=
-MK_PROFILE=	no
-NO_PIC=
-
-.if ${MACHINE_CPUARCH} == "i386" || ${MACHINE_CPUARCH} == "amd64"
-CFLAGS+=        -march=i386
-.endif
-.if ${MACHINE_ARCH} == "amd64"
-CFLAGS+=        -m32
-.endif
-
-WARNS?=		0
-
-# string functions from libc
-.PATH: ${SRCTOP}/lib/libc/string
-SRCS+=  bcmp.c bcopy.c bzero.c
 
 # Our password input method
 SRCS+=  pwgets.c
@@ -45,12 +28,10 @@ SRCS+=		rijndael-alg-fst.c rijndael-api-fst.c rijndael-api.c
 
 # local GELI Implementation
 .PATH: ${SYSDIR}/geom/eli
-CFLAGS+=	-D_STAND
 SRCS+=		geliboot_crypto.c g_eli_hmac.c g_eli_key.c g_eli_key_cache.c pkcs5v2.c
 
 # aes
 .PATH:		${SYSDIR}/opencrypto
 SRCS+=		xform_aes_xts.c
 
-.include <bsd.stand.mk>
 .include <bsd.lib.mk>

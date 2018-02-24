@@ -3,7 +3,6 @@
 .include <bsd.init.mk>
 
 LIB=		ofw
-INTERNALLIB=
 
 SRCS=	devicename.c elf_freebsd.c ofw_console.c ofw_copy.c ofw_disk.c \
 	ofw_memory.c ofw_module.c ofw_net.c ofw_reboot.c \
@@ -14,9 +13,7 @@ SRCS+=  devicename_stubs.c
 # Pick up the bootstrap header for some interface items
 CFLAGS+=	-I${LDRSRC}
 
-CFLAGS+=	-ffreestanding
 .if ${MACHINE_CPUARCH} == "powerpc"
-CFLAGS+=	-msoft-float
 SRCS+=		ppc64_elf_freebsd.c
 .endif
 

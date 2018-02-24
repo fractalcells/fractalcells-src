@@ -5,22 +5,15 @@
 .PATH:		${SYSDIR}/contrib/libfdt/
 
 LIB=		fdt
-INTERNALLIB=
 
 # Vendor sources of libfdt.
 SRCS+=		fdt.c fdt_ro.c fdt_wip.c fdt_sw.c fdt_rw.c fdt_strerror.c \
-		fdt_empty_tree.c
+		fdt_empty_tree.c fdt_addresses.c fdt_overlay.c
 
 # Loader's fdt commands extension sources.
-SRCS+=		fdt_loader_cmd.c fdt_overlay.c
+SRCS+=		fdt_loader_cmd.c
 
 CFLAGS+=	-I${SYSDIR}/contrib/libfdt/ -I${LDRSRC}
-
-CFLAGS+=	-ffreestanding
-
-.if ${MACHINE_CPUARCH} == "powerpc" || ${MACHINE_CPUARCH} == "arm" || ${MACHINE_CPUARCH} == "mips"
-CFLAGS+=	-msoft-float
-.endif
 
 CFLAGS+=	-Wformat -Wall
 
@@ -28,5 +21,4 @@ CFLAGS+=	-Wformat -Wall
 NOPIE=		1
 .endif
 
-.include <bsd.stand.mk>
 .include <bsd.lib.mk>

@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2005 Peter Grehan
  * Copyright (c) 2009 Nathan Whitehorn
  * All rights reserved.
@@ -253,17 +255,10 @@ cpu_reset()
         PLATFORM_RESET(plat_obj);
 }
 
-int
-cpu_idle_wakeup(int cpu)
-{
-	return (PLATFORM_IDLE_WAKEUP(plat_obj, cpu));
-}
-
-void
-platform_cpu_idle(int cpu)
+void platform_smp_timebase_sync(u_long tb, int ap)
 {
 
-	PLATFORM_IDLE(plat_obj, cpu);
+	PLATFORM_SMP_TIMEBASE_SYNC(plat_obj, tb, ap);
 }
 
 /*

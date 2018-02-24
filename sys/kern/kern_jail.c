@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 1999 Poul-Henning Kamp.
  * Copyright (c) 2008 Bjoern A. Zeeb.
  * Copyright (c) 2009 James Gritton.
@@ -248,7 +250,7 @@ prison0_init(void)
 	strlcpy(prison0.pr_osrelease, osrelease, sizeof(prison0.pr_osrelease));
 
 #ifdef PAX
-	pax_init_prison(&prison0);
+	(void)pax_init_prison(&prison0, NULL);
 #endif
 }
 
@@ -1301,7 +1303,11 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 		}
 
 #ifdef PAX
-		pax_init_prison(pr);
+		if (!pax_init_prison(pr, opts)) {
+			error = EINVAL;
+			prison_deref(pr, PD_LIST_XLOCKED);
+			goto done_releroot;
+		}
 #endif
 
 		mtx_lock(&pr->pr_mtx);

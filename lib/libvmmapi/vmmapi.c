@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2011 NetApp, Inc.
  * All rights reserved.
  *
@@ -582,6 +584,40 @@ vm_get_register(struct vmctx *ctx, int vcpu, int reg, uint64_t *ret_val)
 
 	error = ioctl(ctx->fd, VM_GET_REGISTER, &vmreg);
 	*ret_val = vmreg.regval;
+	return (error);
+}
+
+int
+vm_set_register_set(struct vmctx *ctx, int vcpu, unsigned int count,
+    const int *regnums, uint64_t *regvals)
+{
+	int error;
+	struct vm_register_set vmregset;
+
+	bzero(&vmregset, sizeof(vmregset));
+	vmregset.cpuid = vcpu;
+	vmregset.count = count;
+	vmregset.regnums = regnums;
+	vmregset.regvals = regvals;
+
+	error = ioctl(ctx->fd, VM_SET_REGISTER_SET, &vmregset);
+	return (error);
+}
+
+int
+vm_get_register_set(struct vmctx *ctx, int vcpu, unsigned int count,
+    const int *regnums, uint64_t *regvals)
+{
+	int error;
+	struct vm_register_set vmregset;
+
+	bzero(&vmregset, sizeof(vmregset));
+	vmregset.cpuid = vcpu;
+	vmregset.count = count;
+	vmregset.regnums = regnums;
+	vmregset.regvals = regvals;
+
+	error = ioctl(ctx->fd, VM_GET_REGISTER_SET, &vmregset);
 	return (error);
 }
 
@@ -1433,6 +1469,7 @@ vm_get_ioctls(size_t *len)
 	    VM_ALLOC_MEMSEG, VM_GET_MEMSEG, VM_MMAP_MEMSEG, VM_MMAP_MEMSEG,
 	    VM_MMAP_GETNEXT, VM_SET_REGISTER, VM_GET_REGISTER,
 	    VM_SET_SEGMENT_DESCRIPTOR, VM_GET_SEGMENT_DESCRIPTOR,
+	    VM_SET_REGISTER_SET, VM_GET_REGISTER_SET,
 	    VM_INJECT_EXCEPTION, VM_LAPIC_IRQ, VM_LAPIC_LOCAL_IRQ,
 	    VM_LAPIC_MSI, VM_IOAPIC_ASSERT_IRQ, VM_IOAPIC_DEASSERT_IRQ,
 	    VM_IOAPIC_PULSE_IRQ, VM_IOAPIC_PINCOUNT, VM_ISA_ASSERT_IRQ,

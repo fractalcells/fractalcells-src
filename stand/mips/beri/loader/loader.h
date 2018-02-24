@@ -41,6 +41,7 @@ extern struct devsw	 beri_cfi_disk;
 extern struct devsw	 beri_sdcard_disk;
 
 /* devicename.c */
+struct env_var;
 int	 beri_arch_setcurrdev(struct env_var *, int, const void *);
 char	*beri_arch_fmtdev(void *);
 int	 beri_arch_getdev(void **, const char *, const char **);
@@ -55,7 +56,7 @@ extern char		**boot2_envv;
 extern struct bootinfo	 boot2_bootinfo;
 
 /* metadata.c */
-int	md_load64(char *args, vm_offset_t *modulep);
+int	md_load64(char *args, vm_offset_t *modulep, vm_offset_t *dtbp);
 
 /* vers.c */
 extern char		bootprog_info[];

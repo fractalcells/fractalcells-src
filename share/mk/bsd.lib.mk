@@ -84,6 +84,14 @@ CTFFLAGS+= -g
 PICFLAG=-fPIC
 .endif
 
+.if defined(MK_RETPOLINE) && ${MK_RETPOLINE} != "no"
+CFLAGS+=	-mretpoline
+CXXFLAGS+=	-mretpoline
+.if !defined(NO_PIC)
+LDFLAGS+=	-Wl,-z,retpolineplt
+.endif
+.endif
+
 .if defined(MK_PIE)
 # Ports will not have MK_PIE defined and the following logic requires
 # it be defined.
@@ -308,18 +316,6 @@ lib${LIB_PRIVATE}${LIB}_pic.a: ${SOBJS}
 	${RANLIB} ${RANLIBFLAGS} ${.TARGET}
 .endif
 
-.if defined(WANT_LINT) && !defined(NO_LINT) && defined(LIB) && !empty(LIB)
-LINTLIB=	llib-l${LIB}.ln
-_LIBS+=		${LINTLIB}
-LINTOBJS+=	${SRCS:M*.c:.c=.ln}
-CLEANFILES+=	${LINTOBJS}
-
-${LINTLIB}: ${LINTOBJS}
-	@${ECHO} building lint library ${.TARGET}
-	@rm -f ${.TARGET}
-	${LINT} ${LINTLIBFLAGS} ${CFLAGS:M-[DIU]*} ${.ALLSRC}
-.endif
-
 .endif # !defined(INTERNALLIB)
 
 .if defined(_SKIP_BUILD)
@@ -426,10 +422,6 @@ _libinstall:
 	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},development} -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
 	    ${_INSTALLFLAGS} lib${LIB}_pic.a ${DESTDIR}${_LIBDIR}/
 .endif
-.if defined(WANT_LINT) && !defined(NO_LINT) && defined(LIB) && !empty(LIB)
-	${INSTALL} ${TAG_ARGS:D${TAG_ARGS},development} -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
-	    ${_INSTALLFLAGS} ${LINTLIB} ${DESTDIR}${LINTLIBDIR}/
-.endif
 .endif # !defined(INTERNALLIB)
 
 .if !defined(LIBRARIES_ONLY)
@@ -446,11 +438,6 @@ realinstall: maninstall
 .ORDER: beforeinstall maninstall
 .endif
 
-.endif
-
-.if !target(lint)
-lint: ${SRCS:M*.c}
-	${LINT} ${LINTFLAGS} ${CFLAGS:M-[DIU]*} ${.ALLSRC}
 .endif
 
 .if ${MK_MAN} != "no" && !defined(LIBRARIES_ONLY)

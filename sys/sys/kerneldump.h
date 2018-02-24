@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 2002 Poul-Henning Kamp
  * Copyright (c) 2002 Networks Associates Technology, Inc.
  * All rights reserved.
@@ -57,6 +59,7 @@
 
 #define	KERNELDUMP_COMP_NONE		0
 #define	KERNELDUMP_COMP_GZIP		1
+#define	KERNELDUMP_COMP_ZSTD		2
 
 #define	KERNELDUMP_ENC_NONE		0
 #define	KERNELDUMP_ENC_AES_256_CBC	1

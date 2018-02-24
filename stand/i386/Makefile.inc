@@ -3,9 +3,6 @@
 # $FreeBSD$
 
 LOADER_ADDRESS?=0x200000
-CFLAGS+=	-march=i386 -ffreestanding
-CFLAGS.gcc+=	-mpreferred-stack-boundary=2
-CFLAGS+=	${CFLAGS_NO_SIMD} -msoft-float
 LDFLAGS+=	-nostdlib
 
 # BTX components
@@ -17,6 +14,8 @@ BTXCRT=		${BTXDIR}/lib/crt0.o
 NOPIE=	yes
 BTXSRC=		${BOOTSRC}/i386/btx
 BTXLIB=		${BTXSRC}/lib
+
+CFLAGS+=	-I${BTXLIB}
 
 # compact binary with no padding between text, data, bss
 LDSCRIPT=	${BOOTSRC}/i386/boot.ldscript
