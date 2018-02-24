@@ -251,6 +251,9 @@ SUBDIR+=secure
 .if !defined(NO_SHARE)
 SUBDIR+=share
 .endif
+.if ${MK_BOOT} != "no"
+SUBDIR+=stand
+.endif
 SUBDIR+=sys usr.bin usr.sbin
 .if ${MK_TESTS} != "no"
 SUBDIR+=	tests
@@ -1986,6 +1989,9 @@ _rescue=rescue/rescue
 .if ${MK_TCSH} != "no"
 _tcsh=bin/csh
 .endif
+.if ${MK_FILE} != "no"
+_libmagic=lib/libmagic
+.endif
 
 # kernel-toolchain skips _cleanobj, so handle cleaning up previous
 # build-tools directories if needed.
@@ -2002,7 +2008,7 @@ _bt_clean=	${CLEANDIR}
     ${_rescue} \
     ${_share} \
     usr.bin/awk \
-    lib/libmagic \
+    ${_libmagic} \
     usr.bin/mkesdb_static \
     usr.bin/mkcsmapper_static \
     usr.bin/vi/catalog \
@@ -2079,7 +2085,7 @@ _clang_libs=	lib/clang
 _gcc=		gnu/usr.bin/cc
 .endif
 .if ${MK_USB} != "no"
-_usb_tools=	sys/boot/usb/tools
+_usb_tools=	stand/usb/tools
 .endif
 
 cross-tools: .MAKE .PHONY
@@ -2814,7 +2820,8 @@ cleanworld cleanuniverse: .PHONY
 	-chflags -R 0 ${BW_CANONICALOBJDIR}
 	rm -rf ${BW_CANONICALOBJDIR}*
 .endif
-.if make(cleanworld) && ${MK_AUTO_OBJ} == "no"
+.if make(cleanworld) && ${MK_AUTO_OBJ} == "no" && \
+    (empty(BW_CANONICALOBJDIR) || ${.CURDIR:tA} == ${BW_CANONICALOBJDIR:tA})
 .if ${.CURDIR} == ${.OBJDIR} || ${.CURDIR}/obj == ${.OBJDIR}
 	#   To be safe in this case, fall back to a 'make cleandir'
 	${_+_}@cd ${.CURDIR}; ${MAKE} cleandir
