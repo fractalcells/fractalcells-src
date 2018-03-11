@@ -382,6 +382,8 @@
         ..
         rtld-elf
         ..
+        tftpd
+        ..
     ..
     sbin
         dhclient
@@ -967,6 +969,8 @@
         sed
             regress.multitest.out
             ..
+        ..
+        seq
         ..
         soelim
         ..
