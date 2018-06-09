@@ -587,6 +587,8 @@ pfsync_input(struct mbuf **mp, int *offp __unused, int proto __unused)
 	int rv;
 	uint16_t count;
 
+	PF_RULES_RLOCK_TRACKER;
+
 	*mp = NULL;
 	V_pfsyncstats.pfsyncs_ipackets++;
 
@@ -1319,7 +1321,8 @@ pfsyncioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		pfsyncr.pfsyncr_defer = (PFSYNCF_DEFER ==
 		    (sc->sc_flags & PFSYNCF_DEFER));
 		PFSYNC_UNLOCK(sc);
-		return (copyout(&pfsyncr, ifr->ifr_data, sizeof(pfsyncr)));
+		return (copyout(&pfsyncr, ifr_data_get_ptr(ifr),
+		    sizeof(pfsyncr)));
 
 	case SIOCSETPFSYNC:
 	    {
@@ -1330,7 +1333,8 @@ pfsyncioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 		if ((error = priv_check(curthread, PRIV_NETINET_PF)) != 0)
 			return (error);
-		if ((error = copyin(ifr->ifr_data, &pfsyncr, sizeof(pfsyncr))))
+		if ((error = copyin(ifr_data_get_ptr(ifr), &pfsyncr,
+		    sizeof(pfsyncr))))
 			return (error);
 
 		if (pfsyncr.pfsyncr_maxupdates > 255)

@@ -432,13 +432,6 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		*n_args = 1;
 		break;
 	}
-	/* ovadvise */
-	case 72: {
-		struct ovadvise_args *p = params;
-		iarg[0] = p->anom; /* int */
-		*n_args = 1;
-		break;
-	}
 	/* munmap */
 	case 73: {
 		struct munmap_args *p = params;
@@ -3282,6 +3275,15 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		*n_args = 6;
 		break;
 	}
+	/* getrandom */
+	case 563: {
+		struct getrandom_args *p = params;
+		uarg[0] = (intptr_t) p->buf; /* void * */
+		uarg[1] = p->buflen; /* size_t */
+		uarg[2] = p->flags; /* unsigned int */
+		*n_args = 3;
+		break;
+	}
 	default:
 		*n_args = 0;
 		break;
@@ -3932,16 +3934,6 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* sstk */
 	case 70:
-		switch(ndx) {
-		case 0:
-			p = "int";
-			break;
-		default:
-			break;
-		};
-		break;
-	/* ovadvise */
-	case 72:
 		switch(ndx) {
 		case 0:
 			p = "int";
@@ -8752,6 +8744,22 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* getrandom */
+	case 563:
+		switch(ndx) {
+		case 0:
+			p = "userland void *";
+			break;
+		case 1:
+			p = "size_t";
+			break;
+		case 2:
+			p = "unsigned int";
+			break;
+		default:
+			break;
+		};
+		break;
 	default:
 		break;
 	};
@@ -8830,7 +8838,7 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	/* obreak */
 	case 17:
 		if (ndx == 0 || ndx == 1)
-			p = "int";
+			p = "caddr_t";
 		break;
 	/* getpid */
 	case 20:
@@ -9005,11 +9013,6 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* sstk */
 	case 70:
-		if (ndx == 0 || ndx == 1)
-			p = "int";
-		break;
-	/* ovadvise */
-	case 72:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
@@ -10635,6 +10638,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* cpuset_setdomain */
 	case 562:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* getrandom */
+	case 563:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;

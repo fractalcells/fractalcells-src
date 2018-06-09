@@ -5,8 +5,6 @@
  * $FreeBSD$
  */
 
-#include "opt_compat.h"
-
 #include <sys/param.h>
 #include <sys/sysent.h>
 #include <sys/sysproto.h>
@@ -123,7 +121,7 @@ struct sysent sysent[] = {
 	{ AS(sbrk_args), (sy_call_t *)sys_sbrk, AUE_SBRK, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 69 = sbrk */
 	{ AS(sstk_args), (sy_call_t *)sys_sstk, AUE_SSTK, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 70 = sstk */
 	{ compat(AS(ommap_args),mmap), AUE_MMAP, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 71 = old mmap */
-	{ AS(ovadvise_args), (sy_call_t *)sys_ovadvise, AUE_O_VADVISE, NULL, 0, 0, 0, SY_THR_STATIC },	/* 72 = vadvise */
+	{ compat11(AS(freebsd11_vadvise_args),vadvise), AUE_O_VADVISE, NULL, 0, 0, 0, SY_THR_STATIC },	/* 72 = freebsd11 vadvise */
 	{ AS(munmap_args), (sy_call_t *)sys_munmap, AUE_MUNMAP, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 73 = munmap */
 	{ AS(mprotect_args), (sy_call_t *)sys_mprotect, AUE_MPROTECT, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 74 = mprotect */
 	{ AS(madvise_args), (sy_call_t *)sys_madvise, AUE_MADVISE, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 75 = madvise */
@@ -614,4 +612,5 @@ struct sysent sysent[] = {
 	{ AS(kevent_args), (sy_call_t *)sys_kevent, AUE_KEVENT, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 560 = kevent */
 	{ AS(cpuset_getdomain_args), (sy_call_t *)sys_cpuset_getdomain, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 561 = cpuset_getdomain */
 	{ AS(cpuset_setdomain_args), (sy_call_t *)sys_cpuset_setdomain, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 562 = cpuset_setdomain */
+	{ AS(getrandom_args), (sy_call_t *)sys_getrandom, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 563 = getrandom */
 };

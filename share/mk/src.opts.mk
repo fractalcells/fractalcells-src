@@ -131,14 +131,14 @@ __DEFAULT_YES_OPTIONS = \
     LIBRESSL \
     LIBTHR \
     LLVM_COV \
+    LOADER_GELI \
+    LOADER_OFW \
+    LOADER_UBOOT \
     LOCALES \
     LOCATE \
     LPR \
     LS_COLORS \
     LZMA_SUPPORT \
-    LOADER_GELI \
-    LOADER_OFW \
-    LOADER_UBOOT \
     MAIL \
     MAILWRAPPER \
     MAKE \
@@ -249,8 +249,8 @@ __DEFAULT_NO_OPTIONS+=GCC GCC_BOOTSTRAP GNUCXX GPL_DTC
 # If an external compiler that supports C++11 is used as ${CC} and Clang
 # supports the target, then Clang is enabled but GCC is installed as the
 # default /usr/bin/cc.
-__DEFAULT_YES_OPTIONS+=CLANG CLANG_FULL GCC GCC_BOOTSTRAP GNUCXX GPL_DTC
-__DEFAULT_NO_OPTIONS+=CLANG_BOOTSTRAP CLANG_IS_CC LLD
+__DEFAULT_YES_OPTIONS+=CLANG CLANG_FULL GCC GCC_BOOTSTRAP GNUCXX GPL_DTC LLD
+__DEFAULT_NO_OPTIONS+=CLANG_BOOTSTRAP CLANG_IS_CC
 .else
 # Everything else disables Clang, and uses GCC instead.
 __DEFAULT_YES_OPTIONS+=GCC GCC_BOOTSTRAP GNUCXX GPL_DTC
@@ -266,20 +266,15 @@ BROKEN_OPTIONS+=TESTS   # "undefined reference to `_Unwind_Resume'"
 BROKEN_OPTIONS+=CXX     # "libcxxrt.so: undefined reference to `_Unwind_Resume_or_Rethrow'"
 .endif
 .if ${__T} == "aarch64" || ${__T} == "amd64" || ${__T} == "i386" || \
-    ${__T:Mriscv*} != ""
+    ${__T:Mriscv*} != "" || ${__TT} == "mips"
 __DEFAULT_YES_OPTIONS+=LLVM_LIBUNWIND
 .else
 __DEFAULT_NO_OPTIONS+=LLVM_LIBUNWIND
 .endif
 .if ${__T} == "aarch64" || ${__T} == "amd64"
-__DEFAULT_YES_OPTIONS+=LLD_BOOTSTRAP
+__DEFAULT_YES_OPTIONS+=LLD_BOOTSTRAP LLD_IS_LD
 .else
-__DEFAULT_NO_OPTIONS+=LLD_BOOTSTRAP
-.endif
-.if ${__T} == "aarch64" || ${__T} == "amd64"
-__DEFAULT_YES_OPTIONS+=LLD_IS_LD
-.else
-__DEFAULT_NO_OPTIONS+=LLD_IS_LD
+__DEFAULT_NO_OPTIONS+=LLD_BOOTSTRAP LLD_IS_LD
 .endif
 .if ${__T} == "aarch64" || ${__T} == "amd64" || ${__T} == "i386"
 __DEFAULT_YES_OPTIONS+=LLDB
@@ -464,6 +459,11 @@ MK_KERBEROS:=	no
 
 .if ${MK_PF} == "no"
 MK_AUTHPF:=	no
+.endif
+
+.if ${MK_PORTSNAP} == "no"
+# freebsd-update depends on phttpget from portsnap
+MK_FREEBSD_UPDATE:=	no
 .endif
 
 .if ${MK_TESTS} == "no"
