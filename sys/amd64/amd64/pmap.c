@@ -373,6 +373,8 @@ static u_int64_t	DMPDphys;	/* phys addr of direct mapped level 2 */
 static u_int64_t	DMPDPphys;	/* phys addr of direct mapped level 3 */
 static int		ndmpdpphys;	/* number of DMPDPphys pages */
 
+static vm_paddr_t	KERNend;	/* phys addr of end of bootstrap data */
+
 /*
  * pmap_mapdev support pre initialization (i.e. console)
  */
@@ -1004,8 +1006,9 @@ create_pagetables(vm_paddr_t *firstaddr)
 	/* Map from zero to end of allocations under 2M pages */
 	/* This replaces some of the KPTphys entries above */
 	for (i = 0; (i << PDRSHIFT) < *firstaddr; i++)
+		/* Preset PG_M and PG_A because demotion expects it. */
 		pd_p[i] = (i << PDRSHIFT) | X86_PG_V | PG_PS | pg_g |
-		    bootaddr_rwx(i << PDRSHIFT);
+		    X86_PG_M | X86_PG_A | bootaddr_rwx(i << PDRSHIFT);
 
 	/*
 	 * Because we map the physical blocks in 2M pages, adjust firstaddr
@@ -1095,7 +1098,10 @@ pmap_bootstrap(vm_paddr_t *firstaddr)
 {
 	vm_offset_t va;
 	pt_entry_t *pte;
+	uint64_t cr4;
 	int i;
+
+	KERNend = *firstaddr;
 
 	if (!pti)
 		pg_g = X86_PG_G;
@@ -1119,11 +1125,21 @@ pmap_bootstrap(vm_paddr_t *firstaddr)
 	virtual_end = VM_MAX_KERNEL_ADDRESS;
 
 
-	/* XXX do %cr0 as well */
-	load_cr4(rcr4() | CR4_PGE);
+	/*
+	 * Enable PG_G global pages, then switch to the kernel page
+	 * table from the bootstrap page table.  After the switch, it
+	 * is possible to enable SMEP and SMAP since PG_U bits are
+	 * correct now.
+	 */
+	cr4 = rcr4();
+	cr4 |= CR4_PGE;
+	load_cr4(cr4);
 	load_cr3(KPML4phys);
 	if (cpu_stdext_feature & CPUID_STDEXT_SMEP)
-		load_cr4(rcr4() | CR4_SMEP);
+		cr4 |= CR4_SMEP;
+	if (cpu_stdext_feature & CPUID_STDEXT_SMAP)
+		cr4 |= CR4_SMAP;
+	load_cr4(cr4);
 
 	/*
 	 * Initialize the kernel pmap (which is statically allocated).
@@ -1178,8 +1194,16 @@ pmap_bootstrap(vm_paddr_t *firstaddr)
 			kernel_pmap->pm_pcids[i].pm_pcid = PMAP_PCID_KERN;
 			kernel_pmap->pm_pcids[i].pm_gen = 1;
 		}
-		PCPU_SET(pcid_next, PMAP_PCID_KERN + 1);
+
+		/*
+		 * PMAP_PCID_KERN + 1 is used for initialization of
+		 * proc0 pmap.  The pmap' pcid state might be used by
+		 * EFIRT entry before first context switch, so it
+		 * needs to be valid.
+		 */
+		PCPU_SET(pcid_next, PMAP_PCID_KERN + 2);
 		PCPU_SET(pcid_gen, 1);
+
 		/*
 		 * pcpu area for APs is zeroed during AP startup.
 		 * pc_pcid_next and pc_pcid_gen are initialized by AP
@@ -1297,6 +1321,9 @@ pmap_init(void)
 	vm_size_t s;
 	int error, i, pv_npg, ret, skz63;
 
+	/* L1TF, reserve page @0 unconditionally */
+	vm_page_blacklist_add(0, bootverbose);
+
 	/* Detect bare-metal Skylake Server and Skylake-X. */
 	if (vm_guest == VM_GUEST_NO && cpu_vendor_id == CPU_VENDOR_INTEL &&
 	    CPUID_TO_FAMILY(cpu_id) == 0x6 && CPUID_TO_MODEL(cpu_id) == 0x55) {
@@ -1329,6 +1356,7 @@ pmap_init(void)
 	 * Initialize the vm page array entries for the kernel pmap's
 	 * page table pages.
 	 */ 
+	PMAP_LOCK(kernel_pmap);
 	for (i = 0; i < nkpt; i++) {
 		mpte = PHYS_TO_VM_PAGE(KPTphys + (i << PAGE_SHIFT));
 		KASSERT(mpte >= vm_page_array &&
@@ -1337,7 +1365,11 @@ pmap_init(void)
 		mpte->pindex = pmap_pde_pindex(KERNBASE) + i;
 		mpte->phys_addr = KPTphys + (i << PAGE_SHIFT);
 		mpte->wire_count = 1;
+		if (i << PDRSHIFT < KERNend &&
+		    pmap_insert_pt_page(kernel_pmap, mpte))
+			panic("pmap_init: pmap_insert_pt_page failed");
 	}
+	PMAP_UNLOCK(kernel_pmap);
 	vm_wire_add(nkpt);
 
 	/*
@@ -1386,8 +1418,7 @@ pmap_init(void)
 	 */
 	s = (vm_size_t)(pv_npg * sizeof(struct md_page));
 	s = round_page(s);
-	pv_table = (struct md_page *)kmem_malloc(kernel_arena, s,
-	    M_WAITOK | M_ZERO);
+	pv_table = (struct md_page *)kmem_malloc(s, M_WAITOK | M_ZERO);
 	for (i = 0; i < pv_npg; i++)
 		TAILQ_INIT(&pv_table[i].pv_list);
 	TAILQ_INIT(&pv_dummy.pv_list);
@@ -1474,6 +1505,14 @@ pmap_swap_pat(pmap_t pmap, pt_entry_t entry)
 	return (entry);
 }
 
+boolean_t
+pmap_is_valid_memattr(pmap_t pmap __unused, vm_memattr_t mode)
+{
+
+	return (mode >= 0 && mode < PAT_INDEX_SIZE &&
+	    pat_index[(int)mode] >= 0);
+}
+
 /*
  * Determine the appropriate bits to set in a PTE or PDE for a specified
  * caching mode.
@@ -1483,7 +1522,7 @@ pmap_cache_bits(pmap_t pmap, int mode, boolean_t is_pde)
 {
 	int cache_bits, pat_flag, pat_idx;
 
-	if (mode < 0 || mode >= PAT_INDEX_SIZE || pat_index[mode] < 0)
+	if (!pmap_is_valid_memattr(pmap, mode))
 		panic("Unknown caching mode %d\n", mode);
 
 	switch (pmap->pm_type) {
@@ -2313,9 +2352,7 @@ retry:
 				if (vm_page_pa_tryrelock(pmap, (pde &
 				    PG_PS_FRAME) | (va & PDRMASK), &pa))
 					goto retry;
-				m = PHYS_TO_VM_PAGE((pde & PG_PS_FRAME) |
-				    (va & PDRMASK));
-				vm_page_hold(m);
+				m = PHYS_TO_VM_PAGE(pa);
 			}
 		} else {
 			pte = *pmap_pde_to_pte(pdep, va);
@@ -2324,10 +2361,11 @@ retry:
 				if (vm_page_pa_tryrelock(pmap, pte & PG_FRAME,
 				    &pa))
 					goto retry;
-				m = PHYS_TO_VM_PAGE(pte & PG_FRAME);
-				vm_page_hold(m);
+				m = PHYS_TO_VM_PAGE(pa);
 			}
 		}
+		if (m != NULL)
+			vm_page_hold(m);
 	}
 	PA_UNLOCK_COND(pa);
 	PMAP_UNLOCK(pmap);
@@ -2626,16 +2664,10 @@ pmap_pinit0(pmap_t pmap)
 	bzero(&pmap->pm_stats, sizeof pmap->pm_stats);
 	pmap->pm_flags = pmap_flags;
 	CPU_FOREACH(i) {
-		pmap->pm_pcids[i].pm_pcid = PMAP_PCID_NONE;
-		pmap->pm_pcids[i].pm_gen = 0;
-		if (!pti) {
-			__pcpu[i].pc_kcr3 = PMAP_NO_CR3;
-			__pcpu[i].pc_ucr3 = PMAP_NO_CR3;
-		}
+		pmap->pm_pcids[i].pm_pcid = PMAP_PCID_KERN + 1;
+		pmap->pm_pcids[i].pm_gen = 1;
 	}
-	PCPU_SET(curpmap, kernel_pmap);
-	pmap_activate(curthread);
-	CPU_FILL(&kernel_pmap->pm_active);
+	pmap_activate_boot(pmap);
 }
 
 void
@@ -3068,8 +3100,8 @@ pmap_growkernel(vm_offset_t addr)
 		return;
 
 	addr = roundup2(addr, NBPDR);
-	if (addr - 1 >= kernel_map->max_offset)
-		addr = kernel_map->max_offset;
+	if (addr - 1 >= vm_map_max(kernel_map))
+		addr = vm_map_max(kernel_map);
 	while (kernel_vm_end < addr) {
 		pdpe = pmap_pdpe(kernel_pmap, kernel_vm_end);
 		if ((*pdpe & X86_PG_V) == 0) {
@@ -3089,8 +3121,8 @@ pmap_growkernel(vm_offset_t addr)
 		pde = pmap_pdpe_to_pde(pdpe, kernel_vm_end);
 		if ((*pde & X86_PG_V) != 0) {
 			kernel_vm_end = (kernel_vm_end + NBPDR) & ~PDRMASK;
-			if (kernel_vm_end - 1 >= kernel_map->max_offset) {
-				kernel_vm_end = kernel_map->max_offset;
+			if (kernel_vm_end - 1 >= vm_map_max(kernel_map)) {
+				kernel_vm_end = vm_map_max(kernel_map);
 				break;                       
 			}
 			continue;
@@ -3108,8 +3140,8 @@ pmap_growkernel(vm_offset_t addr)
 		pde_store(pde, newpdir);
 
 		kernel_vm_end = (kernel_vm_end + NBPDR) & ~PDRMASK;
-		if (kernel_vm_end - 1 >= kernel_map->max_offset) {
-			kernel_vm_end = kernel_map->max_offset;
+		if (kernel_vm_end - 1 >= vm_map_max(kernel_map)) {
+			kernel_vm_end = vm_map_max(kernel_map);
 			break;                       
 		}
 	}
@@ -3545,8 +3577,9 @@ reserve_pv_entries(pmap_t pmap, int needed, struct rwlock **lockp)
 {
 	struct pch new_tail;
 	struct pv_chunk *pc;
-	int avail, free;
 	vm_page_t m;
+	int avail, free;
+	bool reclaimed;
 
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
 	KASSERT(lockp != NULL, ("reserve_pv_entries: lockp is NULL"));
@@ -3574,13 +3607,14 @@ retry:
 		if (avail >= needed)
 			break;
 	}
-	for (; avail < needed; avail += _NPCPV) {
+	for (reclaimed = false; avail < needed; avail += _NPCPV) {
 		m = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL | VM_ALLOC_NOOBJ |
 		    VM_ALLOC_WIRED);
 		if (m == NULL) {
 			m = reclaim_pv_chunk(pmap, lockp);
 			if (m == NULL)
 				goto retry;
+			reclaimed = true;
 		}
 		PV_STAT(atomic_add_int(&pc_chunk_count, 1));
 		PV_STAT(atomic_add_int(&pc_chunk_allocs, 1));
@@ -3593,6 +3627,14 @@ retry:
 		TAILQ_INSERT_HEAD(&pmap->pm_pvchunk, pc, pc_list);
 		TAILQ_INSERT_TAIL(&new_tail, pc, pc_lru);
 		PV_STAT(atomic_add_int(&pv_entry_spare, _NPCPV));
+
+		/*
+		 * The reclaim might have freed a chunk from the current pmap.
+		 * If that chunk contained available entries, we need to
+		 * re-count the number of available entries.
+		 */
+		if (reclaimed)
+			goto retry;
 	}
 	if (!TAILQ_EMPTY(&new_tail)) {
 		mtx_lock(&pv_chunks_mutex);
@@ -4825,6 +4867,7 @@ retry:
 		panic("pmap_enter: invalid page directory va=%#lx", va);
 
 	origpte = *pte;
+	pv = NULL;
 
 	/*
 	 * Is the specified virtual address already mapped?
@@ -4866,6 +4909,45 @@ retry:
 				goto unchanged;
 			goto validate;
 		}
+
+		/*
+		 * The physical page has changed.  Temporarily invalidate
+		 * the mapping.  This ensures that all threads sharing the
+		 * pmap keep a consistent view of the mapping, which is
+		 * necessary for the correct handling of COW faults.  It
+		 * also permits reuse of the old mapping's PV entry,
+		 * avoiding an allocation.
+		 *
+		 * For consistency, handle unmanaged mappings the same way.
+		 */
+		origpte = pte_load_clear(pte);
+		KASSERT((origpte & PG_FRAME) == opa,
+		    ("pmap_enter: unexpected pa update for %#lx", va));
+		if ((origpte & PG_MANAGED) != 0) {
+			om = PHYS_TO_VM_PAGE(opa);
+
+			/*
+			 * The pmap lock is sufficient to synchronize with
+			 * concurrent calls to pmap_page_test_mappings() and
+			 * pmap_ts_referenced().
+			 */
+			if ((origpte & (PG_M | PG_RW)) == (PG_M | PG_RW))
+				vm_page_dirty(om);
+			if ((origpte & PG_A) != 0)
+				vm_page_aflag_set(om, PGA_REFERENCED);
+			CHANGE_PV_LIST_LOCK_TO_PHYS(&lock, opa);
+			pv = pmap_pvh_remove(&om->md, pmap, va);
+			if ((newpte & PG_MANAGED) == 0)
+				free_pv_entry(pmap, pv);
+			if ((om->aflags & PGA_WRITEABLE) != 0 &&
+			    TAILQ_EMPTY(&om->md.pv_list) &&
+			    ((om->flags & PG_FICTITIOUS) != 0 ||
+			    TAILQ_EMPTY(&pa_to_pvh(opa)->pv_list)))
+				vm_page_aflag_clear(om, PGA_WRITEABLE);
+		}
+		if ((origpte & PG_A) != 0)
+			pmap_invalidate_page(pmap, va);
+		origpte = 0;
 	} else {
 		/*
 		 * Increment the counters.
@@ -4879,8 +4961,10 @@ retry:
 	 * Enter on the PV list if part of our managed memory.
 	 */
 	if ((newpte & PG_MANAGED) != 0) {
-		pv = get_pv_entry(pmap, &lock);
-		pv->pv_va = va;
+		if (pv == NULL) {
+			pv = get_pv_entry(pmap, &lock);
+			pv->pv_va = va;
+		}
 		CHANGE_PV_LIST_LOCK_TO_PHYS(&lock, pa);
 		TAILQ_INSERT_TAIL(&m->md.pv_list, pv, pv_next);
 		m->md.pv_gen++;
@@ -4894,25 +4978,10 @@ retry:
 	if ((origpte & PG_V) != 0) {
 validate:
 		origpte = pte_load_store(pte, newpte);
-		opa = origpte & PG_FRAME;
-		if (opa != pa) {
-			if ((origpte & PG_MANAGED) != 0) {
-				om = PHYS_TO_VM_PAGE(opa);
-				if ((origpte & (PG_M | PG_RW)) == (PG_M |
-				    PG_RW))
-					vm_page_dirty(om);
-				if ((origpte & PG_A) != 0)
-					vm_page_aflag_set(om, PGA_REFERENCED);
-				CHANGE_PV_LIST_LOCK_TO_PHYS(&lock, opa);
-				pmap_pvh_free(&om->md, pmap, va);
-				if ((om->aflags & PGA_WRITEABLE) != 0 &&
-				    TAILQ_EMPTY(&om->md.pv_list) &&
-				    ((om->flags & PG_FICTITIOUS) != 0 ||
-				    TAILQ_EMPTY(&pa_to_pvh(opa)->pv_list)))
-					vm_page_aflag_clear(om, PGA_WRITEABLE);
-			}
-		} else if ((newpte & PG_M) == 0 && (origpte & (PG_M |
-		    PG_RW)) == (PG_M | PG_RW)) {
+		KASSERT((origpte & PG_FRAME) == pa,
+		    ("pmap_enter: unexpected pa update for %#lx", va));
+		if ((newpte & PG_M) == 0 && (origpte & (PG_M | PG_RW)) ==
+		    (PG_M | PG_RW)) {
 			if ((origpte & PG_MANAGED) != 0)
 				vm_page_dirty(m);
 
@@ -7426,7 +7495,7 @@ pmap_activate_sw(struct thread *td)
 		 * pmap_activate_sw(), from the context switch, is
 		 * immune to this race, because interrupts are
 		 * disabled (while the thread lock is owned), and IPI
-		 * happends after curpmap is updated.  Protect other
+		 * happens after curpmap is updated.  Protect other
 		 * callers in a similar way, by disabling interrupts
 		 * around the %cr3 register reload and curpmap
 		 * assignment.
@@ -7470,7 +7539,7 @@ pmap_activate_sw(struct thread *td)
 			intr_restore(rflags);
 		if (cached)
 			PCPU_INC(pm_save_cnt);
-	} else if (cr3 != pmap->pm_cr3) {
+	} else {
 		load_cr3(pmap->pm_cr3);
 		PCPU_SET(curpmap, pmap);
 		if (pti) {
@@ -7498,6 +7567,32 @@ pmap_activate(struct thread *td)
 	critical_enter();
 	pmap_activate_sw(td);
 	critical_exit();
+}
+
+void
+pmap_activate_boot(pmap_t pmap)
+{
+	uint64_t kcr3;
+	u_int cpuid;
+
+	/*
+	 * kernel_pmap must be never deactivated, and we ensure that
+	 * by never activating it at all.
+	 */
+	MPASS(pmap != kernel_pmap);
+
+	cpuid = PCPU_GET(cpuid);
+#ifdef SMP
+	CPU_SET_ATOMIC(cpuid, &pmap->pm_active);
+#else
+	CPU_SET(cpuid, &pmap->pm_active);
+#endif
+	PCPU_SET(curpmap, pmap);
+	kcr3 = pmap->pm_cr3;
+	if (pmap_pcid_enabled)
+		kcr3 |= pmap->pm_pcids[cpuid].pm_pcid | CR3_PCID_SAVE;
+	PCPU_SET(kcr3, kcr3);
+	PCPU_SET(ucr3, PMAP_NO_CR3);
 }
 
 void

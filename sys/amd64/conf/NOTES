@@ -332,8 +332,8 @@ device		ipw		# Intel 2100 wireless NICs.
 device		iwi		# Intel 2200BG/2225BG/2915ABG wireless NICs.
 device		iwn		# Intel 4965/1000/5000/6000 wireless NICs.
 device		ixl		# Intel XL710 40Gbe PCIE Ethernet
-options		IXL_IW		# Enable iWARP Client Interface in ixl(4)
-device		ixlv		# Intel XL710 40Gbe VF PCIE Ethernet
+#options		IXL_IW		# Enable iWARP Client Interface in ixl(4)
+#device		ixlv		# Intel XL710 40Gbe VF PCIE Ethernet
 device  	mthca		# Mellanox HCA InfiniBand
 device  	mlx4		# Shared code module between IB and Ethernet
 device  	mlx4ib		# Mellanox ConnectX HCA InfiniBand
@@ -612,7 +612,7 @@ device		amdsmn
 #
 options 	NKPT=31
 
-# EFI Runtime Services support (not functional yet).
+# EFI Runtime Services support
 options 	EFIRT
 
 
@@ -634,7 +634,7 @@ options 	COMPAT_CLOUDABI64
 # Enable Linux ABI emulation
 #XXX#options 	COMPAT_LINUX
 
-# Enable 32-bit Linux ABI emulation (requires COMPAT_43 and COMPAT_FREEBSD32)
+# Enable 32-bit Linux ABI emulation (requires COMPAT_FREEBSD32).
 options 	COMPAT_LINUX32
 
 # Enable the linux-like proc filesystem support (requires COMPAT_LINUX32
