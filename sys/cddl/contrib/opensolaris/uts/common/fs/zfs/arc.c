@@ -538,8 +538,13 @@ typedef struct arc_state {
  */
 int zfs_arc_meta_prune = 10000;
 unsigned long zfs_arc_dnode_limit_percent = 10;
-int zfs_arc_meta_strategy = ARC_STRATEGY_META_BALANCED;
+int zfs_arc_meta_strategy = ARC_STRATEGY_META_ONLY;
 int zfs_arc_meta_adjust_restarts = 4096;
+
+SYSCTL_INT(_vfs_zfs, OID_AUTO, arc_meta_strategy, CTLFLAG_RWTUN,
+    &zfs_arc_meta_strategy, 0,
+    "ARC metadata reclamation strategy "
+    "(0 = metadata only, 1 = balance data and metadata)");
 
 /* The 6 states: */
 static arc_state_t ARC_anon;
@@ -4445,6 +4450,12 @@ arc_adjust(void)
 		total_evicted +=
 		    arc_adjust_impl(arc_mru, 0, target, ARC_BUFC_METADATA);
 	}
+
+	/*
+	 * Re-sum ARC stats after the first round of evictions.
+	 */
+	asize = aggsum_value(&arc_size);
+	ameta = aggsum_value(&arc_meta_used);
 
 	/*
 	 * Adjust MFU size

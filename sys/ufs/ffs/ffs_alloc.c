@@ -484,8 +484,8 @@ static int doreallocblks = 1;
 SYSCTL_INT(_vfs_ffs, OID_AUTO, doreallocblks, CTLFLAG_RW, &doreallocblks, 0,
 "enable block reallocation");
 
-static int dotrimcons = 0;
-SYSCTL_INT(_vfs_ffs, OID_AUTO, dotrimcons, CTLFLAG_RW, &dotrimcons, 0,
+static int dotrimcons = 1;
+SYSCTL_INT(_vfs_ffs, OID_AUTO, dotrimcons, CTLFLAG_RWTUN, &dotrimcons, 0,
 "enable BIO_DELETE / TRIM consolidation");
 
 static int maxclustersearch = 10;
@@ -3399,7 +3399,7 @@ sysctl_ffs_fsck(SYSCTL_HANDLER_ARGS)
 		vn_finished_write(mp);
 		mp = NULL;
 		error = kern_unlinkat(td, AT_FDCWD, (char *)(intptr_t)cmd.value,
-		    UIO_USERSPACE, (ino_t)cmd.size);
+		    UIO_USERSPACE, 0, (ino_t)cmd.size);
 		break;
 
 	case FFS_SET_INODE:
