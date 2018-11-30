@@ -431,7 +431,7 @@ finalconfig() {
 		"Services" "Set daemons to run on startup" \
 		"System Hardening" "Set security options" \
 		"Time Zone" "Set system timezone" \
-		"Handbook" "Install HardenedBSD (FreeBSD) Handbook (requires network)" 2>&1 1>&3)
+		"Handbook" "Install fractalcells (FreeBSD) Handbook (requires network)" 2>&1 1>&3)
 	exec 3>&-
 
 	case "$REVISIT" in
