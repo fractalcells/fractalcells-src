@@ -7,7 +7,6 @@ _LIBARCHIVEDIR=	${SRCTOP}/contrib/libarchive
 LIB=	archive
 
 LIBADD=	z bz2 lzma bsdxml
-CFLAGS+= -DHAVE_BZLIB_H=1 -DHAVE_LIBLZMA=1 -DHAVE_LZMA_H=1
 
 # FreeBSD SHLIB_MAJOR value is managed as part of the FreeBSD system.
 # It has no real relation to the libarchive version number.
@@ -48,6 +47,8 @@ INCS=	archive.h archive_entry.h
 
 # Sources to be compiled.
 SRCS=	archive_acl.c					\
+	archive_blake2sp_ref.c				\
+	archive_blake2s_ref.c				\
 	archive_check_magic.c				\
 	archive_cmdline.c				\
 	archive_cryptor.c				\
@@ -109,6 +110,7 @@ SRCS=	archive_acl.c					\
 	archive_read_support_format_lha.c		\
 	archive_read_support_format_mtree.c		\
 	archive_read_support_format_rar.c		\
+	archive_read_support_format_rar5.c		\
 	archive_read_support_format_raw.c		\
 	archive_read_support_format_tar.c		\
 	archive_read_support_format_warc.c		\

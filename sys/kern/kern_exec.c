@@ -503,6 +503,7 @@ interpret:
 		goto exec_fail_dealloc;
 
 	imgp->proc->p_osrel = 0;
+	imgp->proc->p_fctl0 = 0;
 
 	/*
 	 * Implement image setuid/setgid.
@@ -1236,7 +1237,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
  * space into the temporary string buffer.
  */
 int
-exec_copyin_args(struct image_args *args, char *fname,
+exec_copyin_args(struct image_args *args, const char *fname,
     enum uio_seg segflg, char **argv, char **envv)
 {
 	u_long argp, envp;
