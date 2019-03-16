@@ -53,6 +53,7 @@ MAN=	aac.4 \
 	arcmsr.4 \
 	aslr.4 \
 	${_asmc.4} \
+	at45d.4 \
 	ata.4 \
 	ath.4 \
 	ath_ahb.4 \
@@ -303,6 +304,7 @@ MAN=	aac.4 \
 	mvs.4 \
 	mwl.4 \
 	mwlfw.4 \
+	mx25l.4 \
 	mxge.4 \
 	my.4 \
 	nand.4 \
@@ -325,6 +327,7 @@ MAN=	aac.4 \
 	ng_btsocket.4 \
 	ng_car.4 \
 	ng_ccatm.4 \
+	ng_checksum.4 \
 	ng_cisco.4 \
 	ng_deflate.4 \
 	ng_device.4 \

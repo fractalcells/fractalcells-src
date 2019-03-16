@@ -59,7 +59,6 @@ __FBSDID("$FreeBSD$");
 #include <unistd.h>
 #include <utmpx.h>
 
-#include "extern.h"
 #include "vary.h"
 
 #ifndef	TM_YEAR_BASE
@@ -67,7 +66,6 @@ __FBSDID("$FreeBSD$");
 #endif
 
 static time_t tval;
-int retval;
 
 static void badformat(void);
 static void iso8601_usage(const char *);
@@ -93,14 +91,12 @@ static const char *rfc2822_format = "%a, %d %b %Y %T %z";
 int
 main(int argc, char *argv[])
 {
-	struct timezone tz;
 	int ch, rflag;
 	bool Iflag, jflag, nflag, Rflag;
 	const char *format;
 	char buf[1024];
-	char *endptr, *fmt;
+	char *fmt;
 	char *tmp;
-	int set_timezone;
 	struct vary *v;
 	const struct vary *badv;
 	struct tm *lt;
@@ -110,18 +106,10 @@ main(int argc, char *argv[])
 	v = NULL;
 	fmt = NULL;
 	(void) setlocale(LC_TIME, "");
-	tz.tz_dsttime = tz.tz_minuteswest = 0;
 	rflag = 0;
 	Iflag = jflag = nflag = Rflag = 0;
-	set_timezone = 0;
-	while ((ch = getopt(argc, argv, "d:f:I::jnRr:t:uv:")) != -1)
+	while ((ch = getopt(argc, argv, "f:I::jnRr:uv:")) != -1)
 		switch((char)ch) {
-		case 'd':		/* daylight savings time */
-			tz.tz_dsttime = strtol(optarg, &endptr, 10) ? 1 : 0;
-			if (endptr == optarg || *endptr != '\0')
-				usage();
-			set_timezone = 1;
-			break;
 		case 'f':
 			fmt = optarg;
 			break;
@@ -162,13 +150,6 @@ main(int argc, char *argv[])
 					usage();
 			}
 			break;
-		case 't':		/* minutes west of UTC */
-					/* error check; don't allow "PST" */
-			tz.tz_minuteswest = strtol(optarg, &endptr, 10);
-			if (endptr == optarg || *endptr != '\0')
-				usage();
-			set_timezone = 1;
-			break;
 		case 'u':		/* do everything in UTC */
 			(void)setenv("TZ", "UTC0", 1);
 			break;
@@ -180,13 +161,6 @@ main(int argc, char *argv[])
 		}
 	argc -= optind;
 	argv += optind;
-
-	/*
-	 * If -d or -t, set the timezone or daylight savings time; this
-	 * doesn't belong here; the kernel should not know about either.
-	 */
-	if (set_timezone && settimeofday(NULL, &tz) != 0)
-		err(1, "settimeofday (timezone)");
 
 	if (!rflag && time(&tval) == -1)
 		err(1, "time");
@@ -248,7 +222,7 @@ printdate(const char *buf)
 	(void)printf("%s\n", buf);
 	if (fflush(stdout))
 		err(1, "stdout");
-	exit(retval);
+	exit(EXIT_SUCCESS);
 }
 
 static void
@@ -370,7 +344,7 @@ setthetime(const char *fmt, const char *p, int jflag, int nflag)
 
 	if (!jflag) {
 		/* set the time */
-		if (nflag || netsettime(tval)) {
+		if (nflag) {
 			utx.ut_type = OLD_TIME;
 			memset(utx.ut_id, 0, sizeof(utx.ut_id));
 			(void)gettimeofday(&utx.ut_tv, NULL);
@@ -413,8 +387,7 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr, "%s\n%s\n%s\n",
-	    "usage: date [-jnRu] [-d dst] [-r seconds|file] [-t west] "
-	    "[-v[+|-]val[ymwdHMS]]",
+	    "usage: date [-jnRu] [-r seconds|file] [-v[+|-]val[ymwdHMS]]",
 	    "            "
 	    "[-I[date | hours | minutes | seconds]]",
 	    "            "

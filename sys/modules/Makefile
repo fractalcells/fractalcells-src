@@ -108,8 +108,6 @@ SUBDIR=	\
 	dcons_crom \
 	de \
 	${_dpms} \
-	${_drm} \
-	${_drm2} \
 	dummynet \
 	${_ed} \
 	${_efirt} \
@@ -168,6 +166,7 @@ SUBDIR=	\
 	if_tun \
 	if_vlan \
 	if_vxlan \
+	iflib \
 	${_iir} \
 	imgact_binmisc \
 	${_intelspi} \
@@ -247,8 +246,8 @@ SUBDIR=	\
 	${_mly} \
 	mmc \
 	mmcsd \
-	mpr \
-	mps \
+	${_mpr} \
+	${_mps} \
 	mpt \
 	mqueue \
 	mrsas \
@@ -404,6 +403,7 @@ SUBDIR=	\
 	${_x86bios} \
 	${_xe} \
 	xl \
+	xz \
 	zlib
 
 .if ${MK_AUTOFS} != "no" || defined(ALL_MODULES)
@@ -473,6 +473,10 @@ SUBDIR+=	iscsi
 SUBDIR+=	iscsi_initiator
 .endif
 
+.if !empty(OPT_FDT)
+SUBDIR+=	fdt
+.endif
+
 .if ${MACHINE_CPUARCH} == "aarch64" || ${MACHINE_CPUARCH} == "amd64" || \
     ${MACHINE_CPUARCH} == "i386"
 SUBDIR+=	linprocfs
@@ -518,6 +522,13 @@ _rtwnfw=	rtwnfw
 	${MACHINE_ARCH} != "powerpc" && ${MACHINE_ARCH} != "powerpcspe" && \
 	${MACHINE_CPUARCH} != "riscv"
 _cxgbe=		cxgbe
+.endif
+
+# These rely on 64bit atomics
+.if ${MACHINE_ARCH} != "powerpc" && ${MACHINE_ARCH} != "powerpcspe" && \
+	${MACHINE_CPUARCH} != "mips"
+_mps=		mps
+_mpr=		mpr
 .endif
 
 .if ${MK_TESTS} != "no" || defined(ALL_MODULES)
@@ -572,12 +583,6 @@ _cpuctl=	cpuctl
 _cpufreq=	cpufreq
 _cs=		cs
 _dpms=		dpms
-.if ${MK_MODULE_DRM} != "no"
-_drm=		drm
-.endif
-.if ${MK_MODULE_DRM2} != "no"
-_drm2=		drm2
-.endif
 _ed=		ed
 _em=		em
 _ena=		ena
@@ -766,9 +771,6 @@ _cardbus=	cardbus
 _cbb=		cbb
 _cfi=		cfi
 _cpufreq=	cpufreq
-.if ${MK_MODULE_DRM} != "no"
-_drm=		drm
-.endif
 _exca=		exca
 _ffec=		ffec
 _nvd=		nvd
@@ -778,9 +780,6 @@ _wi=		wi
 .endif
 
 .if ${MACHINE_ARCH} == "powerpc64"
-.if ${MK_MODULE_DRM2} != "no"
-_drm2=		drm2
-.endif
 _ipmi=		ipmi
 .endif
 .if ${MACHINE_ARCH} == "powerpc64" || ${MACHINE_ARCH} == "powerpc"
