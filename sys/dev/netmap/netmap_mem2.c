@@ -2012,6 +2012,10 @@ netmap_mem2_if_new(struct netmap_adapter *na, struct netmap_priv_d *priv)
 	/* initialize base fields -- override const */
 	*(u_int *)(uintptr_t)&nifp->ni_tx_rings = na->num_tx_rings;
 	*(u_int *)(uintptr_t)&nifp->ni_rx_rings = na->num_rx_rings;
+	*(u_int *)(uintptr_t)&nifp->ni_host_tx_rings =
+		(na->num_host_tx_rings ? na->num_host_tx_rings : 1);
+	*(u_int *)(uintptr_t)&nifp->ni_host_rx_rings =
+		(na->num_host_rx_rings ? na->num_host_rx_rings : 1);
 	strlcpy(nifp->ni_name, na->name, sizeof(nifp->ni_name));
 
 	/*
@@ -2442,8 +2446,8 @@ netmap_mem_pt_guest_ifp_del(struct netmap_mem_d *nmd, struct ifnet *ifp)
 			} else {
 				ptnmd->pt_ifs = curr->next;
 			}
-			nm_prinf("removed (ifp=%p,nifp_offset=%u)",
-			  curr->ifp, curr->nifp_offset);
+			nm_prinf("removed (ifp=%s,nifp_offset=%u)",
+			  curr->ifp->if_xname, curr->nifp_offset);
 			nm_os_free(curr);
 			ret = 0;
 			break;

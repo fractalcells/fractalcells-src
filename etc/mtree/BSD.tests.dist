@@ -238,6 +238,20 @@
                     version
                     ..
                 ..
+                i386
+                    arrays
+                    ..
+                    funcs
+                    ..
+                    pid
+                    ..
+                    ustack
+                    ..
+                ..
+                amd64
+                    arrays
+                    ..
+                ..
             ..
             zfsd
             ..
@@ -289,6 +303,8 @@
             ..
         ..
         libarchive
+        ..
+        libbe
         ..
         libc
             c063
@@ -705,6 +721,8 @@
                     ..
                 ..
             ..
+        ..
+        devrandom
         ..
         dtrace
         ..

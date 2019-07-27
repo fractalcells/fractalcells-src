@@ -272,7 +272,7 @@ struct inpcb {
 			 inp_hpts_calls :1,	/* (i) from output hpts */
 			 inp_input_calls :1,	/* (i) from input hpts */
 			 inp_spare_bits2 : 4;
-	uint8_t inp_spare_byte;		/* Compiler hole */
+	uint8_t inp_numa_domain;	/* numa domain */
 	void	*inp_ppcb;		/* (i) pointer to per-protocol pcb */
 	struct	socket *inp_socket;	/* (i) back pointer to socket */
 	uint32_t 	 inp_hptsslot;	/* Hpts wheel slot this tcb is Lock(i&b) */
@@ -759,7 +759,9 @@ int	inp_so_options(const struct inpcb *inp);
 #define	INP_ORIGDSTADDR		0x00000800 /* receive IP dst address/port */
 #define INP_CANNOT_DO_ECN	0x00001000 /* The stack does not do ECN */
 #define	INP_REUSEPORT_LB	0x00002000 /* SO_REUSEPORT_LB option is set */
-
+#define INP_SUPPORTS_MBUFQ	0x00004000 /* Supports the mbuf queue method of LRO */
+#define INP_MBUF_QUEUE_READY	0x00008000 /* The transport is pacing, inputs can be queued */
+#define INP_DONT_SACK_QUEUE	0x00010000 /* If a sack arrives do not wake me */
 /*
  * Flags passed to in_pcblookup*() functions.
  */

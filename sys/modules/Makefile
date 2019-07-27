@@ -67,7 +67,6 @@ SUBDIR=	\
 	${_bios} \
 	${_bktr} \
 	${_blake2} \
-	${_bm} \
 	bnxt \
 	bridgestp \
 	bwi \
@@ -98,7 +97,6 @@ SUBDIR=	\
 	${_cpufreq} \
 	${_crypto} \
 	${_cryptodev} \
-	${_cs} \
 	${_ctau} \
 	ctl \
 	${_cxgb} \
@@ -106,29 +104,24 @@ SUBDIR=	\
 	dc \
 	dcons \
 	dcons_crom \
-	de \
 	${_dpms} \
 	dummynet \
-	${_ed} \
 	${_efirt} \
 	${_em} \
 	${_ena} \
-	${_ep} \
 	${_epic} \
 	esp \
 	${_et} \
 	evdev \
-	${_ex} \
 	${_exca} \
 	ext2fs \
 	fdc \
 	fdescfs \
-	${_fe} \
 	${_ffec} \
 	filemon \
 	firewire \
 	firmware \
-	fuse \
+	fusefs \
 	${_fxp} \
 	gem \
 	geom \
@@ -162,8 +155,7 @@ SUBDIR=	\
 	if_lagg \
 	${_if_ndis} \
 	${_if_stf} \
-	if_tap \
-	if_tun \
+	if_tuntap \
 	if_vlan \
 	if_vxlan \
 	iflib \
@@ -212,6 +204,7 @@ SUBDIR=	\
 	libalias \
 	libiconv \
 	libmchain \
+	lindebugfs \
 	${_linux} \
 	${_linux_common} \
 	${_linux64} \
@@ -237,6 +230,7 @@ SUBDIR=	\
 	mfi \
 	mii \
 	mlx \
+	mlxfw \
 	${_mlx4} \
 	${_mlx4ib} \
 	${_mlx4en} \
@@ -260,8 +254,6 @@ SUBDIR=	\
 	${_mwlfw} \
 	mxge \
 	my \
-	${_nandfs} \
-	${_nandsim} \
 	${_nctgpio} \
 	${_ndis} \
 	${_netgraph} \
@@ -289,7 +281,6 @@ SUBDIR=	\
 	${_padlock_rng} \
 	${_pccard} \
 	${_pcfclock} \
-	pcn \
 	${_pf} \
 	${_pflog} \
 	${_pfsync} \
@@ -305,6 +296,7 @@ SUBDIR=	\
 	${_pst} \
 	pty  \
 	puc \
+	pwm \
 	${_qlxge} \
 	${_qlxgb} \
 	${_qlxgbe} \
@@ -330,9 +322,9 @@ SUBDIR=	\
 	sdhci \
 	${_sdhci_acpi} \
 	sdhci_pci \
+	sdio \
 	sem \
 	send \
-	${_sf} \
 	${_sfxge} \
 	sge \
 	${_sgx} \
@@ -343,7 +335,6 @@ SUBDIR=	\
 	sk \
 	${_smartpqi} \
 	smbfs \
-	sn \
 	snp \
 	sound \
 	${_speaker} \
@@ -352,12 +343,12 @@ SUBDIR=	\
 	${_sppp} \
 	ste \
 	stge \
+	${_superio} \
 	${_sym} \
 	${_syscons} \
 	sysvipc \
 	tcp \
 	${_ti} \
-	tl \
 	tmpfs \
 	${_toecore} \
 	${_tpm} \
@@ -365,8 +356,6 @@ SUBDIR=	\
 	${_twa} \
 	twe \
 	tws \
-	tx \
-	${_txp} \
 	uart \
 	ubsec \
 	udf \
@@ -386,8 +375,6 @@ SUBDIR=	\
 	${_vpo} \
 	vr \
 	vte \
-	vx \
-	wb \
 	${_wbwd} \
 	${_wi} \
 	wlan \
@@ -401,7 +388,6 @@ SUBDIR=	\
 	${_wpi} \
 	${_wpifw} \
 	${_x86bios} \
-	${_xe} \
 	xl \
 	xz \
 	zlib
@@ -481,11 +467,24 @@ SUBDIR+=	fdt
     ${MACHINE_CPUARCH} == "i386"
 SUBDIR+=	linprocfs
 SUBDIR+=	linsysfs
+_ena=		ena
+.if ${MK_OFED} != "no" || defined(ALL_MODULES)
+_ibcore=	ibcore
+_ipoib=		ipoib
+_iser=		iser
 .endif
-
-.if ${MK_NAND} != "no" || defined(ALL_MODULES)
-_nandfs=	nandfs
-_nandsim=	nandsim
+_mlx4=		mlx4
+_mlx5=		mlx5
+.if (${MK_INET_SUPPORT} != "no" && ${MK_INET6_SUPPORT} != "no") || \
+	defined(ALL_MODULES)
+_mlx4en=	mlx4en
+_mlx5en=	mlx5en
+.endif
+.if ${MK_OFED} != "no" || defined(ALL_MODULES)
+_mthca=		mthca
+_mlx4ib=	mlx4ib
+_mlx5ib=	mlx5ib
+.endif
 .endif
 
 .if ${MK_NETGRAPH} != "no" || defined(ALL_MODULES)
@@ -505,9 +504,7 @@ _pfsync=	pfsync
 _bce=		bce
 _fxp=		fxp
 _ispfw=		ispfw
-_sf=		sf
 _ti=		ti
-_txp=		txp
 
 .if ${MACHINE_CPUARCH} != "mips"
 _mwlfw=		mwlfw
@@ -581,24 +578,12 @@ _cardbus=	cardbus
 _cbb=		cbb
 _cpuctl=	cpuctl
 _cpufreq=	cpufreq
-_cs=		cs
 _dpms=		dpms
-_ed=		ed
 _em=		em
-_ena=		ena
-_ep=		ep
 _et=		et
 _exca=		exca
-_fe=		fe
-.if ${MK_OFED} != "no" || defined(ALL_MODULES)
-_ibcore=        ibcore
-.endif
 _if_ndis=	if_ndis
 _io=		io
-.if ${MK_OFED} != "no" || defined(ALL_MODULES)
-_ipoib=         ipoib
-_iser=		iser
-.endif
 _ix=		ix
 _ixv=		ixv
 _linux=		linux
@@ -619,7 +604,6 @@ _sppp=		sppp
 _vmware=	vmware
 _wbwd=		wbwd
 _wi=		wi
-_xe=		xe
 
 _aac=		aac
 _aacraid=	aacraid
@@ -671,18 +655,6 @@ _iwifw=		iwifw
 _iwmfw=		iwmfw
 _iwnfw=		iwnfw
 .endif
-_mlx4=		mlx4
-_mlx5=		mlx5
-.if (${MK_INET_SUPPORT} != "no" && ${MK_INET6_SUPPORT} != "no") || \
-	defined(ALL_MODULES)
-_mlx4en=	mlx4en
-_mlx5en=	mlx5en
-.endif
-.if ${MK_OFED} != "no" || defined(ALL_MODULES)
-_mthca=		mthca
-_mlx4ib=	mlx4ib
-_mlx5ib=	mlx5ib
-.endif
 _mly=		mly
 _nfe=		nfe
 _nvd=		nvd
@@ -695,6 +667,7 @@ _rdrand_rng=	rdrand_rng
 .endif
 _s3=		s3
 _sdhci_acpi=	sdhci_acpi
+_superio=	superio
 _tpm=		tpm
 _twa=		twa
 _vesa=		vesa
@@ -755,7 +728,6 @@ _sbni=		sbni
 .if ${MK_SOURCELESS_UCODE} != "no"
 _ctau=		ctau
 .endif
-_ex=		ex
 .endif
 
 .if ${MACHINE_CPUARCH} == "arm"
@@ -766,7 +738,6 @@ _cpsw=		cpsw
 .if ${MACHINE_CPUARCH} == "powerpc"
 _agp=		agp
 _an=		an
-_bm=		bm
 _cardbus=	cardbus
 _cbb=		cbb
 _cfi=		cfi
@@ -819,8 +790,8 @@ SUBDIR:= ${SUBDIR:N${reject}}
 .MAKEFLAGS+=	-DNO_XREF
 afterinstall: .PHONY
 	@if type kldxref >/dev/null 2>&1; then \
-		${ECHO} kldxref ${DESTDIR}${KMODDIR}; \
-		kldxref ${DESTDIR}${KMODDIR}; \
+		${ECHO} ${KLDXREF_CMD} ${DESTDIR}${KMODDIR}; \
+		${KLDXREF_CMD} ${DESTDIR}${KMODDIR}; \
 	fi
 .endif
 

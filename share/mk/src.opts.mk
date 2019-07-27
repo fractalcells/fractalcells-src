@@ -182,7 +182,6 @@ __DEFAULT_YES_OPTIONS = \
     TELNET \
     TEXTPROC \
     TFTP \
-    TIMED \
     UNBOUND \
     USB \
     UTMPX \
@@ -210,7 +209,7 @@ __DEFAULT_NO_OPTIONS = \
     LOADER_FIREWIRE \
     LOADER_FORCE_LE \
     LOADER_VERBOSE \
-    NAND \
+    LOADER_VERIEXEC_PASS_MANIFEST \
     OFED \
     OFED_EXTRA \
     OPENLDAP \
@@ -220,6 +219,7 @@ __DEFAULT_NO_OPTIONS = \
     RPCBIND_WARMSTART_SUPPORT \
     SHARED_TOOLCHAIN \
     SORT_THREADS \
+    SPECTREV1_FIX \
     SVN \
     ZONEINFO_LEAPSECONDS_SUPPORT \
     ZONEINFO_OLD_TIMEZONES_SUPPORT \
@@ -278,7 +278,7 @@ __LLVM_TARGETS= \
 		powerpc \
 		sparc \
 		x86
-__LLVM_TARGET_FILT=	C/(amd64|i386)/x86/:S/sparc64/sparc/:S/arm64/aarch64/
+__LLVM_TARGET_FILT=	C/(amd64|i386)/x86/:S/sparc64/sparc/:S/arm64/aarch64/:S/powerpc64/powerpc/
 .for __llt in ${__LLVM_TARGETS}
 # Default the given TARGET's LLVM_TARGET support to the value of MK_CLANG.
 .if ${__TT:${__LLVM_TARGET_FILT}} == ${__llt}
@@ -298,6 +298,7 @@ __DEFAULT_DEPENDENT_OPTIONS+=	LLVM_TARGET_${__llt:${__LLVM_TARGET_FILT}:tu}/LLVM
 .endfor
 
 __DEFAULT_NO_OPTIONS+=LLVM_TARGET_BPF
+__DEFAULT_NO_OPTIONS+=LLVM_TARGET_RISCV
 
 .include <bsd.compiler.mk>
 # If the compiler is not C++11 capable, disable Clang and use GCC instead.
@@ -440,6 +441,12 @@ BROKEN_OPTIONS+=NVME
 # PowerPC and Sparc64 need extra crt*.o files
 .if ${__T:Mpowerpc*} || ${__T:Msparc64}
 BROKEN_OPTIONS+=BSD_CRTBEGIN
+.endif
+
+.if ${COMPILER_FEATURES:Mc++11} && (${__T} == "amd64" || ${__T} == "i386")
+__DEFAULT_YES_OPTIONS+=OPENMP
+.else
+__DEFAULT_NO_OPTIONS+=OPENMP
 .endif
 
 .include <bsd.mkopt.mk>
@@ -603,6 +610,9 @@ MK_NTP:=	no
 MK_OPENNTPD:=	no
 .endif
 
+.if ${MK_LOADER_VERIEXEC} == "no"
+MK_LOADER_VERIEXEC_PASS_MANIFEST := no
+.endif
 
 #
 # MK_* options whose default value depends on another option.

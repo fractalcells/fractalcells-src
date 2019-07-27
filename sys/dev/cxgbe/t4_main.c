@@ -694,6 +694,7 @@ static void free_offload_policy(struct t4_offload_policy *);
 static int set_offload_policy(struct adapter *, struct t4_offload_policy *);
 static int read_card_mem(struct adapter *, int, struct t4_mem_range *);
 static int read_i2c(struct adapter *, struct t4_i2c_data *);
+static int clear_stats(struct adapter *, u_int);
 #ifdef TCP_OFFLOAD
 static int toe_capability(struct vi_info *, int);
 #endif
@@ -1623,7 +1624,7 @@ cxgbe_probe(device_t dev)
 #define T4_CAP (IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_MTU | IFCAP_HWCSUM | \
     IFCAP_VLAN_HWCSUM | IFCAP_TSO | IFCAP_JUMBO_MTU | IFCAP_LRO | \
     IFCAP_VLAN_HWTSO | IFCAP_LINKSTATE | IFCAP_HWCSUM_IPV6 | IFCAP_HWSTATS | \
-    IFCAP_HWRXTSTMP)
+    IFCAP_HWRXTSTMP | IFCAP_NOMAP)
 #define T4_CAP_ENABLE (T4_CAP)
 
 static int
@@ -1636,7 +1637,7 @@ cxgbe_vi_attach(device_t dev, struct vi_info *vi)
 	callout_init(&vi->tick, 1);
 
 	/* Allocate an ifnet and set it up */
-	ifp = if_alloc(IFT_ETHER);
+	ifp = if_alloc_dev(IFT_ETHER, dev);
 	if (ifp == NULL) {
 		device_printf(dev, "Cannot allocate ifnet\n");
 		return (ENOMEM);
@@ -1986,6 +1987,8 @@ cxgbe_ioctl(struct ifnet *ifp, unsigned long cmd, caddr_t data)
 					rxq->iq.flags &= ~IQ_RX_TIMESTAMP;
 			}
 		}
+		if (mask & IFCAP_NOMAP)
+			ifp->if_capenable ^= IFCAP_NOMAP;
 
 #ifdef VLAN_CAPABILITIES
 		VLAN_CAPABILITIES(ifp);
@@ -2057,13 +2060,8 @@ cxgbe_transmit(struct ifnet *ifp, struct mbuf *m)
 		return (rc);
 	}
 #ifdef RATELIMIT
-	if (m->m_pkthdr.snd_tag != NULL) {
-		/* EAGAIN tells the stack we are not the correct interface. */
-		if (__predict_false(ifp != m->m_pkthdr.snd_tag->ifp)) {
-			m_freem(m);
-			return (EAGAIN);
-		}
-
+	if (m->m_pkthdr.csum_flags & CSUM_SND_TAG) {
+		MPASS(m->m_pkthdr.snd_tag->ifp == ifp);
 		return (ethofld_transmit(ifp, m));
 	}
 #endif
@@ -2486,17 +2484,13 @@ alloc_extra_vi(struct adapter *sc, struct port_info *pi, struct vi_info *vi)
 	    device_get_nameunit(vi->dev)));
 	func = vi_mac_funcs[index];
 	rc = t4_alloc_vi_func(sc, sc->mbox, pi->tx_chan, sc->pf, 0, 1,
-	    vi->hw_addr, &vi->rss_size, func, 0);
+	    vi->hw_addr, &vi->rss_size, &vi->vfvld, &vi->vin, func, 0);
 	if (rc < 0) {
 		device_printf(vi->dev, "failed to allocate virtual interface %d"
 		    "for port %d: %d\n", index, pi->port_id, -rc);
 		return (-rc);
 	}
 	vi->viid = rc;
-	if (chip_id(sc) <= CHELSIO_T5)
-		vi->smt_idx = (rc & 0x7f) << 1;
-	else
-		vi->smt_idx = (rc & 0x7f);
 
 	if (vi->rss_size == 1) {
 		/*
@@ -3533,19 +3527,6 @@ install_kld_firmware(struct adapter *sc, struct fw_h *card_fw,
 	load_attempted = false;
 	fw_install = t4_fw_install < 0 ? -t4_fw_install : t4_fw_install;
 
-	if (reason != NULL)
-		goto install;
-
-	if ((sc->flags & FW_OK) == 0) {
-
-		if (c == 0xffffffff) {
-			reason = "missing";
-			goto install;
-		}
-
-		return (0);
-	}
-
 	memcpy(&bundled_fw, drv_fw, sizeof(bundled_fw));
 	if (t4_fw_install < 0) {
 		rc = load_fw_module(sc, &cfg, &fw);
@@ -3561,6 +3542,20 @@ install_kld_firmware(struct adapter *sc, struct fw_h *card_fw,
 		load_attempted = true;
 	}
 	d = be32toh(bundled_fw.fw_ver);
+
+	if (reason != NULL)
+		goto install;
+
+	if ((sc->flags & FW_OK) == 0) {
+
+		if (c == 0xffffffff) {
+			reason = "missing";
+			goto install;
+		}
+
+		rc = 0;
+		goto done;
+	}
 
 	if (!fw_compatible(card_fw, &bundled_fw)) {
 		reason = "incompatible or unusable";
@@ -4015,10 +4010,8 @@ retry:
 		    rc, cfg_file);
 		snprintf(cfg_file, sizeof(cfg_file), "%s", BUILTIN_CF);
 		bzero(&caps_allowed, sizeof(caps_allowed));
-		COPY_CAPS(nbm);
-		COPY_CAPS(link);
 		COPY_CAPS(switch);
-		COPY_CAPS(nic);
+		caps_allowed.niccaps = FW_CAPS_CONFIG_NIC;
 		fallback = false;
 		goto retry;
 	}
@@ -4112,6 +4105,15 @@ set_params__pre_init(struct adapter *sc)
 			    rc);
 		}
 	}
+
+	/* Enable opaque VIIDs with firmwares that support it. */
+	param = FW_PARAM_DEV(OPAQUE_VIID_SMT_EXTN);
+	val = 1;
+	rc = -t4_set_params(sc, sc->mbox, sc->pf, 0, 1, &param, &val);
+	if (rc == 0 && val == 1)
+		sc->params.viid_smt_extn_support = true;
+	else
+		sc->params.viid_smt_extn_support = false;
 
 	return (rc);
 }
@@ -4825,7 +4827,7 @@ update_mac_settings(struct ifnet *ifp, int flags)
 
 		bcopy(IF_LLADDR(ifp), ucaddr, sizeof(ucaddr));
 		rc = t4_change_mac(sc, sc->mbox, vi->viid, vi->xact_addr_filt,
-		    ucaddr, true, true);
+		    ucaddr, true, &vi->smt_idx);
 		if (rc < 0) {
 			rc = -rc;
 			if_printf(ifp, "change_mac failed: %d\n", rc);
@@ -5746,7 +5748,7 @@ get_regs(struct adapter *sc, struct t4_regdump *regs, uint8_t *buf)
 #define	A_PL_INDIR_DATA	0x1fc
 
 static uint64_t
-read_vf_stat(struct adapter *sc, unsigned int viid, int reg)
+read_vf_stat(struct adapter *sc, u_int vin, int reg)
 {
 	u32 stats[2];
 
@@ -5756,8 +5758,7 @@ read_vf_stat(struct adapter *sc, unsigned int viid, int reg)
 		stats[1] = t4_read_reg(sc, VF_MPS_REG(reg + 4));
 	} else {
 		t4_write_reg(sc, A_PL_INDIR_CMD, V_PL_AUTOINC(1) |
-		    V_PL_VFID(G_FW_VIID_VIN(viid)) |
-		    V_PL_ADDR(VF_MPS_REG(reg)));
+		    V_PL_VFID(vin) | V_PL_ADDR(VF_MPS_REG(reg)));
 		stats[0] = t4_read_reg(sc, A_PL_INDIR_DATA);
 		stats[1] = t4_read_reg(sc, A_PL_INDIR_DATA);
 	}
@@ -5765,12 +5766,11 @@ read_vf_stat(struct adapter *sc, unsigned int viid, int reg)
 }
 
 static void
-t4_get_vi_stats(struct adapter *sc, unsigned int viid,
-    struct fw_vi_stats_vf *stats)
+t4_get_vi_stats(struct adapter *sc, u_int vin, struct fw_vi_stats_vf *stats)
 {
 
 #define GET_STAT(name) \
-	read_vf_stat(sc, viid, A_MPS_VF_STAT_##name##_L)
+	read_vf_stat(sc, vin, A_MPS_VF_STAT_##name##_L)
 
 	stats->tx_bcast_bytes    = GET_STAT(TX_VF_BCAST_BYTES);
 	stats->tx_bcast_frames   = GET_STAT(TX_VF_BCAST_FRAMES);
@@ -5793,12 +5793,11 @@ t4_get_vi_stats(struct adapter *sc, unsigned int viid,
 }
 
 static void
-t4_clr_vi_stats(struct adapter *sc, unsigned int viid)
+t4_clr_vi_stats(struct adapter *sc, u_int vin)
 {
 	int reg;
 
-	t4_write_reg(sc, A_PL_INDIR_CMD, V_PL_AUTOINC(1) |
-	    V_PL_VFID(G_FW_VIID_VIN(viid)) |
+	t4_write_reg(sc, A_PL_INDIR_CMD, V_PL_AUTOINC(1) | V_PL_VFID(vin) |
 	    V_PL_ADDR(VF_MPS_REG(A_MPS_VF_STAT_TX_VF_BCAST_BYTES_L)));
 	for (reg = A_MPS_VF_STAT_TX_VF_BCAST_BYTES_L;
 	     reg <= A_MPS_VF_STAT_RX_VF_ERR_FRAMES_H; reg += 4)
@@ -5820,7 +5819,7 @@ vi_refresh_stats(struct adapter *sc, struct vi_info *vi)
 		return;
 
 	mtx_lock(&sc->reg_lock);
-	t4_get_vi_stats(sc, vi->viid, &vi->stats);
+	t4_get_vi_stats(sc, vi->vin, &vi->stats);
 	getmicrotime(&vi->last_refreshed);
 	mtx_unlock(&sc->reg_lock);
 }
@@ -6029,6 +6028,9 @@ t4_sysctls(struct adapter *sc)
 	    CTLTYPE_STRING | CTLFLAG_RD, sc, INTR_CPUS,
 	    sysctl_cpus, "A", "preferred CPUs for interrupts");
 
+	SYSCTL_ADD_INT(ctx, children, OID_AUTO, "swintr", CTLFLAG_RW,
+	    &sc->swintr, 0, "software triggered interrupts");
+
 	/*
 	 * dev.t4nex.X.misc.  Marked CTLFLAG_SKIP to avoid information overload.
 	 */
@@ -6231,8 +6233,10 @@ t4_sysctls(struct adapter *sc)
 		    &sc->tt.sndbuf, 0, "max hardware send buffer size");
 
 		sc->tt.ddp = 0;
-		SYSCTL_ADD_INT(ctx, children, OID_AUTO, "ddp", CTLFLAG_RW,
-		    &sc->tt.ddp, 0, "DDP allowed");
+		SYSCTL_ADD_INT(ctx, children, OID_AUTO, "ddp",
+		    CTLFLAG_RW | CTLFLAG_SKIP, &sc->tt.ddp, 0, "");
+		SYSCTL_ADD_INT(ctx, children, OID_AUTO, "rx_zcopy", CTLFLAG_RW,
+		    &sc->tt.ddp, 0, "Enable zero-copy aio_read(2)");
 
 		sc->tt.rx_coalesce = 1;
 		SYSCTL_ADD_INT(ctx, children, OID_AUTO, "rx_coalesce",
@@ -6260,6 +6264,11 @@ t4_sysctls(struct adapter *sc)
 		    "cop_managed_offloading", CTLFLAG_RW,
 		    &sc->tt.cop_managed_offloading, 0,
 		    "COP (Connection Offload Policy) controls all TOE offload");
+
+		sc->tt.autorcvbuf_inc = 16 * 1024;
+		SYSCTL_ADD_INT(ctx, children, OID_AUTO, "autorcvbuf_inc",
+		    CTLFLAG_RW, &sc->tt.autorcvbuf_inc, 0,
+		    "autorcvbuf increment");
 
 		SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "timer_tick",
 		    CTLTYPE_STRING | CTLFLAG_RD, sc, 0, sysctl_tp_tick, "A",
@@ -9703,7 +9712,7 @@ set_offload_policy(struct adapter *sc, struct t4_offload_policy *uop)
 		/* Delete installed policies. */
 		op = NULL;
 		goto set_policy;
-	} if (uop->nrules > 256) { /* arbitrary */
+	} else if (uop->nrules > 256) { /* arbitrary */
 		return (E2BIG);
 	}
 
@@ -9831,6 +9840,108 @@ read_i2c(struct adapter *sc, struct t4_i2c_data *i2cd)
 	end_synchronized_op(sc, 0);
 
 	return (rc);
+}
+
+static int
+clear_stats(struct adapter *sc, u_int port_id)
+{
+	int i, v, bg_map;
+	struct port_info *pi;
+	struct vi_info *vi;
+	struct sge_rxq *rxq;
+	struct sge_txq *txq;
+	struct sge_wrq *wrq;
+#ifdef TCP_OFFLOAD
+	struct sge_ofld_rxq *ofld_rxq;
+#endif
+
+	if (port_id >= sc->params.nports)
+		return (EINVAL);
+	pi = sc->port[port_id];
+	if (pi == NULL)
+		return (EIO);
+
+	/* MAC stats */
+	t4_clr_port_stats(sc, pi->tx_chan);
+	pi->tx_parse_error = 0;
+	pi->tnl_cong_drops = 0;
+	mtx_lock(&sc->reg_lock);
+	for_each_vi(pi, v, vi) {
+		if (vi->flags & VI_INIT_DONE)
+			t4_clr_vi_stats(sc, vi->vin);
+	}
+	bg_map = pi->mps_bg_map;
+	v = 0;	/* reuse */
+	while (bg_map) {
+		i = ffs(bg_map) - 1;
+		t4_write_indirect(sc, A_TP_MIB_INDEX, A_TP_MIB_DATA, &v,
+		    1, A_TP_MIB_TNL_CNG_DROP_0 + i);
+		bg_map &= ~(1 << i);
+	}
+	mtx_unlock(&sc->reg_lock);
+
+	/*
+	 * Since this command accepts a port, clear stats for
+	 * all VIs on this port.
+	 */
+	for_each_vi(pi, v, vi) {
+		if (vi->flags & VI_INIT_DONE) {
+
+			for_each_rxq(vi, i, rxq) {
+#if defined(INET) || defined(INET6)
+				rxq->lro.lro_queued = 0;
+				rxq->lro.lro_flushed = 0;
+#endif
+				rxq->rxcsum = 0;
+				rxq->vlan_extraction = 0;
+
+				rxq->fl.mbuf_allocated = 0;
+				rxq->fl.mbuf_inlined = 0;
+				rxq->fl.cl_allocated = 0;
+				rxq->fl.cl_recycled = 0;
+				rxq->fl.cl_fast_recycled = 0;
+			}
+
+			for_each_txq(vi, i, txq) {
+				txq->txcsum = 0;
+				txq->tso_wrs = 0;
+				txq->vlan_insertion = 0;
+				txq->imm_wrs = 0;
+				txq->sgl_wrs = 0;
+				txq->txpkt_wrs = 0;
+				txq->txpkts0_wrs = 0;
+				txq->txpkts1_wrs = 0;
+				txq->txpkts0_pkts = 0;
+				txq->txpkts1_pkts = 0;
+				txq->raw_wrs = 0;
+				mp_ring_reset_stats(txq->r);
+			}
+
+#if defined(TCP_OFFLOAD) || defined(RATELIMIT)
+			for_each_ofld_txq(vi, i, wrq) {
+				wrq->tx_wrs_direct = 0;
+				wrq->tx_wrs_copied = 0;
+			}
+#endif
+#ifdef TCP_OFFLOAD
+			for_each_ofld_rxq(vi, i, ofld_rxq) {
+				ofld_rxq->fl.mbuf_allocated = 0;
+				ofld_rxq->fl.mbuf_inlined = 0;
+				ofld_rxq->fl.cl_allocated = 0;
+				ofld_rxq->fl.cl_recycled = 0;
+				ofld_rxq->fl.cl_fast_recycled = 0;
+			}
+#endif
+
+			if (IS_MAIN_VI(vi)) {
+				wrq = &sc->sge.ctrlq[pi->port_id];
+				wrq->tx_wrs_direct = 0;
+				wrq->tx_wrs_copied = 0;
+			}
+		}
+	}
+
+	return (0);
 }
 
 int
@@ -10036,89 +10147,9 @@ t4_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data, int fflag,
 	case CHELSIO_T4_GET_I2C:
 		rc = read_i2c(sc, (struct t4_i2c_data *)data);
 		break;
-	case CHELSIO_T4_CLEAR_STATS: {
-		int i, v, bg_map;
-		u_int port_id = *(uint32_t *)data;
-		struct port_info *pi;
-		struct vi_info *vi;
-
-		if (port_id >= sc->params.nports)
-			return (EINVAL);
-		pi = sc->port[port_id];
-		if (pi == NULL)
-			return (EIO);
-
-		/* MAC stats */
-		t4_clr_port_stats(sc, pi->tx_chan);
-		pi->tx_parse_error = 0;
-		pi->tnl_cong_drops = 0;
-		mtx_lock(&sc->reg_lock);
-		for_each_vi(pi, v, vi) {
-			if (vi->flags & VI_INIT_DONE)
-				t4_clr_vi_stats(sc, vi->viid);
-		}
-		bg_map = pi->mps_bg_map;
-		v = 0;	/* reuse */
-		while (bg_map) {
-			i = ffs(bg_map) - 1;
-			t4_write_indirect(sc, A_TP_MIB_INDEX, A_TP_MIB_DATA, &v,
-			    1, A_TP_MIB_TNL_CNG_DROP_0 + i);
-			bg_map &= ~(1 << i);
-		}
-		mtx_unlock(&sc->reg_lock);
-
-		/*
-		 * Since this command accepts a port, clear stats for
-		 * all VIs on this port.
-		 */
-		for_each_vi(pi, v, vi) {
-			if (vi->flags & VI_INIT_DONE) {
-				struct sge_rxq *rxq;
-				struct sge_txq *txq;
-				struct sge_wrq *wrq;
-
-				for_each_rxq(vi, i, rxq) {
-#if defined(INET) || defined(INET6)
-					rxq->lro.lro_queued = 0;
-					rxq->lro.lro_flushed = 0;
-#endif
-					rxq->rxcsum = 0;
-					rxq->vlan_extraction = 0;
-				}
-
-				for_each_txq(vi, i, txq) {
-					txq->txcsum = 0;
-					txq->tso_wrs = 0;
-					txq->vlan_insertion = 0;
-					txq->imm_wrs = 0;
-					txq->sgl_wrs = 0;
-					txq->txpkt_wrs = 0;
-					txq->txpkts0_wrs = 0;
-					txq->txpkts1_wrs = 0;
-					txq->txpkts0_pkts = 0;
-					txq->txpkts1_pkts = 0;
-					txq->raw_wrs = 0;
-					mp_ring_reset_stats(txq->r);
-				}
-
-#if defined(TCP_OFFLOAD) || defined(RATELIMIT)
-				/* nothing to clear for each ofld_rxq */
-
-				for_each_ofld_txq(vi, i, wrq) {
-					wrq->tx_wrs_direct = 0;
-					wrq->tx_wrs_copied = 0;
-				}
-#endif
-
-				if (IS_MAIN_VI(vi)) {
-					wrq = &sc->sge.ctrlq[pi->port_id];
-					wrq->tx_wrs_direct = 0;
-					wrq->tx_wrs_copied = 0;
-				}
-			}
-		}
+	case CHELSIO_T4_CLEAR_STATS:
+		rc = clear_stats(sc, *(uint32_t *)data);
 		break;
-	}
 	case CHELSIO_T4_SCHED_CLASS:
 		rc = t4_set_sched_class(sc, (struct t4_sched_params *)data);
 		break;

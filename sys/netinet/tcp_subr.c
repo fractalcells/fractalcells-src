@@ -195,6 +195,11 @@ SYSCTL_INT(_net_inet_tcp, TCPCTL_DO_RFC1323, rfc1323, CTLFLAG_VNET | CTLFLAG_RW,
     &VNET_NAME(tcp_do_rfc1323), 0,
     "Enable rfc1323 (high performance TCP) extensions");
 
+VNET_DEFINE(int, tcp_ts_offset_per_conn) = 1;
+SYSCTL_INT(_net_inet_tcp, OID_AUTO, ts_offset_per_conn, CTLFLAG_VNET | CTLFLAG_RW,
+    &VNET_NAME(tcp_ts_offset_per_conn), 0,
+    "Initialize TCP timestamps per connection instead of per host pair");
+
 static int	tcp_log_debug = 0;
 SYSCTL_INT(_net_inet_tcp, OID_AUTO, log_debug, CTLFLAG_RW,
     &tcp_log_debug, 0, "Log errors caused by incoming TCP segments");
@@ -798,8 +803,12 @@ register_tcp_functions_as_names(struct tcp_function_block *blk, int wait,
 		}
 	}
 
+	if (blk->tfb_flags & TCP_FUNC_BEING_REMOVED) {
+		*num_names = 0;
+		return (EINVAL);
+	}
+
 	refcount_init(&blk->tfb_refcnt, 0);
-	blk->tfb_flags = 0;
 	blk->tfb_id = atomic_fetchadd_int(&next_tcp_stack_id, 1);
 	for (i = 0; i < *num_names; i++) {
 		n = malloc(sizeof(struct tcp_function), M_TCPFUNCTIONS, wait);
@@ -1065,6 +1074,9 @@ tcp_init(void)
 	tcp_keepintvl = TCPTV_KEEPINTVL;
 	tcp_maxpersistidle = TCPTV_KEEP_IDLE;
 	tcp_msl = TCPTV_MSL;
+	tcp_rexmit_initial = TCPTV_RTOBASE;
+	if (tcp_rexmit_initial < 1)
+		tcp_rexmit_initial = 1;
 	tcp_rexmit_min = TCPTV_MIN;
 	if (tcp_rexmit_min < 1)
 		tcp_rexmit_min = 1;
@@ -1645,9 +1657,9 @@ tcp_newtcpcb(struct inpcb *inp)
 	 * reasonable initial retransmit time.
 	 */
 	tp->t_srtt = TCPTV_SRTTBASE;
-	tp->t_rttvar = ((TCPTV_RTOBASE - TCPTV_SRTTBASE) << TCP_RTTVAR_SHIFT) / 4;
+	tp->t_rttvar = ((tcp_rexmit_initial - TCPTV_SRTTBASE) << TCP_RTTVAR_SHIFT) / 4;
 	tp->t_rttmin = tcp_rexmit_min;
-	tp->t_rxtcur = TCPTV_RTOBASE;
+	tp->t_rxtcur = tcp_rexmit_initial;
 	tp->snd_cwnd = TCP_MAXWIN << TCP_MAX_WINSHIFT;
 	tp->snd_ssthresh = TCP_MAXWIN << TCP_MAX_WINSHIFT;
 	tp->t_rcvtime = ticks;
@@ -2627,7 +2639,17 @@ tcp_keyed_hash(struct in_conninfo *inc, u_char *key, u_int len)
 uint32_t
 tcp_new_ts_offset(struct in_conninfo *inc)
 {
-	return (tcp_keyed_hash(inc, V_ts_offset_secret,
+	struct in_conninfo inc_store, *local_inc;
+
+	if (!V_tcp_ts_offset_per_conn) {
+		memcpy(&inc_store, inc, sizeof(struct in_conninfo));
+		inc_store.inc_lport = 0;
+		inc_store.inc_fport = 0;
+		local_inc = &inc_store;
+	} else {
+		local_inc = inc;
+	}
+	return (tcp_keyed_hash(local_inc, V_ts_offset_secret,
 	    sizeof(V_ts_offset_secret)));
 }
 

@@ -2701,12 +2701,22 @@ bad:
 static int
 ufs_ioctl(struct vop_ioctl_args *ap)
 {
+	struct vnode *vp;
+	int error;
 
+	vp = ap->a_vp;
 	switch (ap->a_command) {
 	case FIOSEEKDATA:
+		error = vn_lock(vp, LK_SHARED);
+		if (error == 0) {
+			error = ufs_bmap_seekdata(vp, (off_t *)ap->a_data);
+			VOP_UNLOCK(vp, 0);
+		} else
+			error = EBADF;
+		return (error);
 	case FIOSEEKHOLE:
-		return (vn_bmap_seekhole(ap->a_vp, ap->a_command,
-		    (off_t *)ap->a_data, ap->a_cred));
+		return (vn_bmap_seekhole(vp, ap->a_command, (off_t *)ap->a_data,
+		    ap->a_cred));
 	default:
 		return (ENOTTY);
 	}
